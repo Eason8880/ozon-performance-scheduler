@@ -137,7 +137,8 @@ export async function syncStoreSchedules(
   config: StoreScheduleConfig,
 ) {
   const lockClient = await pool.connect();
-  const lockKey = `ozon-store:${storeId}`;
+  // Keep the key compatible with the old polling handler during rollout.
+  const lockKey = storeId;
   try {
     const locked = await lockClient.query(
       "select pg_try_advisory_lock(hashtext($1)) as acquired",

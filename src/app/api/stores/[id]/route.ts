@@ -71,7 +71,7 @@ export async function DELETE(
     if (!/^[0-9a-f-]{36}$/i.test(id))
       return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
     const lockClient = await pool.connect();
-    const lockKey = `ozon-store:${id}`;
+    const lockKey = id;
     let acquired = false;
     try {
       const lock = await lockClient.query(

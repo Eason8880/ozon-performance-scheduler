@@ -7,7 +7,7 @@ import { setPromotion } from "@/lib/ozon";
 import { isCurrentScheduleRevision } from "@/lib/store-schedules";
 import { retryQueueMessage } from "@/lib/queue-retry";
 
-type EdgePayload = { storeId: string; revision: number; dryRun?: boolean };
+type EdgePayload = { storeId: string; revision: number };
 
 export const maxDuration = 60;
 const queueCallback = handleCallback<
@@ -20,24 +20,14 @@ const queueCallback = handleCallback<
       : (message as EdgePayload);
     if (
       !payload ||
-      (payload.dryRun !== true &&
-        (!/^[0-9a-f-]{36}$/i.test(payload.storeId) ||
-          !Number.isSafeInteger(payload.revision)))
+      !/^[0-9a-f-]{36}$/i.test(payload.storeId) ||
+      !Number.isSafeInteger(payload.revision)
     ) {
       throw new Error("Invalid schedule payload");
     }
-    if (payload.dryRun === true) {
-      if (process.env.VERCEL_ENV !== "preview")
-        throw new Error("Dry-run payloads are accepted only on Preview");
-      console.info(
-        "Schedule queue dry-run received",
-        "executionId" in message ? message.executionId : "manual",
-      );
-      return;
-    }
 
     const client = await pool.connect();
-    const lockId = `ozon-store:${payload.storeId}`;
+    const lockId = payload.storeId;
     try {
       const lock = await client.query(
         "select pg_try_advisory_lock(hashtext($1)) as acquired",

@@ -14,7 +14,7 @@ Next.js 控制台用于给 Ozon Performance 店铺设置每日统一开启/关�
 - 修改计划先创建新 revision 的全部触发器，再切换数据库配置并清理旧触发器。创建失败时保留旧计划与 pending 状态，可从店铺卡片重试；删除失败时店铺保持停用并保留清理任务名供重试。广告当前状态同步通过队列触发。
 - 页面提供三个时段预设（莫斯科时间 19:00–23:00、09:00–11:00、13:00–15:00），可以组合并修改到分钟。选择店铺时区后，预设会显示对应的本地时间；在莫斯科与北京时区间切换会平移已有时段，以保持同一实际时刻。
 - 时段采用左闭右开规则：开始时刻起开启，到结束时刻关闭。开始晚于结束即跨午夜；两个时间不能相同。单店最多 8 段，重叠时段拒绝保存。
-- 动态计划通过 `@vercel/schedules` 管理，Queue 消费者配置在 `vercel.json`。这两项 Vercel 能力处于 Beta，需在团队中启用；生产 Function 使用 Vercel OIDC，无需 `VERCEL_TOKEN`。Pro 下 Schedules 创建与运行以及 Queue 操作按量计费，不是固定免费服务；少量店铺每日数次边沿的预期用量很低，实际价格/额度以 [Vercel Schedules](https://vercel.com/docs/schedules) 和 [Queue 定价](https://vercel.com/docs/queues/pricing) 为准。
+- 动态计划通过 `@vercel/schedules` 管理，Queue 消费者配置在 `vercel.json`。这两项 Vercel 能力处于 Beta，已在本项目团队的 Preview 上验证可调用及可投递；生产 Function 使用 Vercel OIDC，无需 `VERCEL_TOKEN`。Pro 下 Schedules 创建与运行以及 Queue 操作按量计费，不是固定免费服务；少量店铺每日数次边沿的预期用量很低，实际价格/额度以 [Vercel Schedules](https://vercel.com/docs/schedules) 和 [Queue 定价](https://vercel.com/docs/queues/pricing) 为准。
 - 尚未进行真实 Ozon 广告开关调用。全商品开关影响该店铺在对应推广类型下的全部商品，请在添加真实凭据前确认此影响范围。
 
 ## 本地运行
@@ -43,6 +43,6 @@ npm run dev
 2. Vercel Marketplace 已连接 Neon PostgreSQL，仅绑定 Production。数据库服务商的免费额度和条款以创建时页面为准。Preview 不绑定生产数据库或生产密钥；如果要让 Preview 可登录/执行，应另建独立免费数据库并设置 Preview 专用密钥。
 3. 在 Vercel Production 环境设置独立随机的 `APP_SECRET`、`SESSION_SECRET`、`ADMIN_PASSWORD`。Preview 不配置生产密钥或生产数据库。不要把 `.env.local` 提交到仓库。可用 `openssl rand -base64 32` 生成 AES key、`openssl rand -hex 32` 生成其余随机值。
 4. 为已连接的 Neon 数据库执行迁移：获取 Production `DATABASE_URL` 后运行 `npm run migrate`。每次发布不会在冷启动执行 DDL。若还未部署本工具的旧版本，需先创建 `stores`、`job_runs` 基础表再运行迁移。
-5. 在 Vercel 团队中启用 Schedules 与 Queue Beta，再部署 Production。Preview 不连接生产数据库，也不配置生产密钥。先在 Preview 通过无广告测试验证 schedule 与 queue 可用性，再让生产店铺进入新调度。
+5. 部署 Production。Preview 不连接生产数据库，也不配置生产密钥。合并部署后，检查店铺卡片的计划同步状态；对于旧店铺需通过“重试同步”或更新计划以登记新动态触发器。
 
 不要把 Preview 连接到生产数据库或复制生产密钥。合并删除静态 Cron 配置的部署后，旧 `/api/cron` 每分钟轮询任务将停止。

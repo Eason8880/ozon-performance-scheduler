@@ -554,9 +554,17 @@ export default function Home() {
                       <button
                         className="quiet"
                         disabled={busy}
-                        onClick={() => void retrySync(store)}
+                        onClick={() =>
+                          void (store.schedule_status === "delete_pending" ||
+                          store.schedule_status === "deleting"
+                            ? removeStore(store)
+                            : retrySync(store))
+                        }
                       >
-                        重试同步
+                        {store.schedule_status === "delete_pending" ||
+                        store.schedule_status === "deleting"
+                          ? "重试删除"
+                          : "重试同步"}
                       </button>
                     </div>
                   )}
@@ -653,8 +661,7 @@ export default function Home() {
         )}
       </section>
       <footer>
-        Vercel Pro Cron 每分钟检查计划；时区计算基于店铺选择，不受服务器 UTC
-        时区影响。
+        按店铺时区在开关时间执行计划；时区计算不受服务器 UTC 时区影响。
       </footer>
     </main>
   );

@@ -289,6 +289,28 @@ test("failed schedule cleanup retains names for retry", async () => {
   assert.equal(retried, true);
 });
 
+test("failed store deletion persists a disabled tombstone for another delete attempt", async () => {
+  const state = {
+    enabled: false,
+    status: "deleting",
+    names: ["store-boundary-on", "store-boundary-off"],
+  };
+  const cleaned = await cleanupScheduleSet(
+    state.names,
+    async () => {
+      throw new Error("provider unavailable");
+    },
+    async (names) => {
+      state.status = "delete_pending";
+      state.names = names;
+    },
+  );
+  assert.equal(cleaned, false);
+  assert.equal(state.enabled, false);
+  assert.equal(state.status, "delete_pending");
+  assert.deepEqual(state.names, ["store-boundary-on", "store-boundary-off"]);
+});
+
 test("stale or disabled schedule revisions are rejected", () => {
   assert.equal(isCurrentScheduleRevision(true, 8, 7), false);
   assert.equal(isCurrentScheduleRevision(false, 8, 8), false);
