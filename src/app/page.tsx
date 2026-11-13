@@ -602,6 +602,77 @@ export default function Home() {
             关闭
           </button>
         </div>
+        <details className="credential-guide">
+          <summary>
+            如何获取 Performance API 的 Client ID 和 Client Secret
+          </summary>
+          <ol className="credential-steps">
+            {[
+              {
+                text: (
+                  <>
+                    登录对应的 Ozon Seller 店铺，打开{" "}
+                    <a
+                      href="https://seller.ozon.ru/app/settings/performance-api"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Performance API 页面
+                    </a>
+                    ，点击“创建账户”。
+                  </>
+                ),
+                caption: "创建 Performance API 服务账号",
+              },
+              {
+                text: (
+                  <>在服务账号列表中点击刚创建的服务账号编号，进入账号详情。</>
+                ),
+                caption: "点击服务账号编号",
+              },
+              { text: <>点击“添加密钥”。</>, caption: "选择添加密钥" },
+              {
+                text: (
+                  <>
+                    在密钥名称中填写 <strong>OPS</strong>，然后点击“添加”。
+                  </>
+                ),
+                caption: "将密钥命名为 OPS 并添加",
+              },
+              {
+                text: <>分别点击 Client ID 和 Client Secret 旁的复制按钮。</>,
+                caption: "复制 Client ID 和 Client Secret",
+              },
+            ].map((step, index) => (
+              <li className="credential-step" key={step.caption}>
+                <p>
+                  <strong>步骤 {index + 1}.</strong> {step.text}
+                </p>
+                <figure>
+                  <a
+                    href={`/credential-guide/step-${index + 1}.png`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      src={`/credential-guide/step-${index + 1}.png`}
+                      alt={`步骤 ${index + 1}：${step.caption}`}
+                    />
+                  </a>
+                  <figcaption>{step.caption}（点击图片可放大）</figcaption>
+                </figure>
+              </li>
+            ))}
+          </ol>
+          <p>
+            复制完成后，将 Client ID 和 Client Secret 分别粘贴到下方对应字段。
+          </p>
+          <p className="note">
+            服务账号编号只是进入账号详情的入口，不是 Client ID。本表单使用
+            Performance API 服务账号密钥；请勿与 Seller API 密钥混淆，也不要分享
+            Client Secret。
+          </p>
+        </details>
         <form className="grid" onSubmit={addStore}>
           <label>
             店铺名称

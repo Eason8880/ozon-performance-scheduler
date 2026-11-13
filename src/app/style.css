@@ -81,6 +81,53 @@ p {
 .dialog-heading h2 {
   margin-bottom: 4px;
 }
+.credential-guide {
+  margin: 0 0 20px;
+  border: 1px solid #dfe7f1;
+  border-radius: 10px;
+  padding: 13px 15px;
+  background: #f8faff;
+}
+.credential-guide summary {
+  color: #245ca8;
+  font-weight: 700;
+  cursor: pointer;
+}
+.credential-guide ol {
+  padding-left: 22px;
+  color: #33425b;
+  line-height: 1.65;
+}
+.credential-guide a {
+  color: #246fe5;
+  margin: 0 3px;
+}
+.credential-steps {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+}
+.credential-step p {
+  margin: 12px 0 8px;
+  color: #33425b;
+}
+.credential-step figure {
+  margin: 0;
+}
+.credential-step img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #e1e7ef;
+  border-radius: 6px;
+}
+.credential-steps figcaption {
+  padding-top: 5px;
+  color: #647187;
+  font-size: 12px;
+}
 .login {
   max-width: 420px;
   margin: 12vh auto;
