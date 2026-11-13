@@ -59,7 +59,7 @@ const presets: Preset[] = [
     id: "morning",
     title: "上午时段",
     moscow: { start: "17:00", stop: "18:00" },
-    beijingLabel: "北京 14:00–16:00",
+    beijingLabel: "北京 22:00–23:00",
   },
   {
     id: "lunch",
