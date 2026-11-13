@@ -3,6 +3,7 @@ import { sessionGroup, encrypt } from "@/lib/security";
 import { checkCredentials } from "@/lib/ozon";
 import { pool } from "@/lib/db";
 import { syncStoreSchedules } from "@/lib/store-schedules";
+import { pageActionRuns, type ActionRunRow } from "@/lib/action-runs";
 import {
   normalizeWindows,
   validTimezone,
@@ -26,11 +27,29 @@ export async function GET() {
          else jsonb_build_array(jsonb_build_object('start',s.start_time,'stop',s.stop_time)) end as windows,
        s.enabled,s.last_action_key,s.last_action_at,s.last_error,s.created_at,
        s.schedule_status,s.schedule_error,
-       coalesce((select json_agg(x) from (select action_key,action,status,detail,source,created_at from job_runs where store_id=s.id order by created_at desc limit 5) x),'[]'::json) as runs
-       from stores s where $1='admin' or s.owner_group=$1 order by s.created_at`,
+       coalesce(logs.rows, '[]'::json) as run_rows
+       from stores s
+       left join lateral (
+         select json_agg(x) as rows from (
+           select id::text as id, action_key,action,status,detail,source,
+             to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_at
+           from job_runs where store_id=s.id
+           order by created_at desc,id desc limit 6
+         ) x
+       ) logs on true
+       where $1='admin' or s.owner_group=$1 order by s.created_at`,
       [group],
     );
-    return NextResponse.json({ stores: r.rows, group });
+    const stores = r.rows.map(({ run_rows, ...store }) => {
+      const page = pageActionRuns((run_rows ?? []) as ActionRunRow[]);
+      return {
+        ...store,
+        runs: page.items,
+        runsHasMore: page.hasMore,
+        runsNextCursor: page.nextCursor,
+      };
+    });
+    return NextResponse.json({ stores, group });
   } catch (e) {
     return NextResponse.json(
       { error: "数据库连接失败，请检查 DATABASE_URL" },
