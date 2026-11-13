@@ -41,21 +41,24 @@ const sign = (v: string) => {
     throw new Error("SESSION_SECRET must contain at least 32 characters");
   return createHmac("sha256", secret).update(v).digest("base64url");
 };
-export type AccessGroup = "admin" | "oz1" | "oz2" | "oz3" | "oz4" | "oz5";
+export type AccessGroup =
+  "admin" | "oz1" | "oz2" | "oz3" | "oz4" | "oz5" | "ct";
 export function checkPassword(p: string): AccessGroup | null {
-  const groupPasswords: Record<Exclude<AccessGroup, "admin">, string> = {
+  const groupPasswords: Record<Exclude<AccessGroup, "admin" | "ct">, string> = {
     oz1: process.env.OZ1_ADMIN_PASSWORD || "oz1",
     oz2: process.env.OZ2_ADMIN_PASSWORD || "oz2",
     oz3: process.env.OZ3_ADMIN_PASSWORD || "oz3",
     oz4: process.env.OZ4_ADMIN_PASSWORD || "oz4",
     oz5: process.env.OZ5_ADMIN_PASSWORD || "oz5",
   };
+  const ctPassword = process.env.CT_ADMIN_PASSWORD || "";
   const candidates: [AccessGroup, string][] = [
     ["admin", process.env.ADMIN_PASSWORD || ""],
     ...(Object.entries(groupPasswords) as [
-      Exclude<AccessGroup, "admin">,
+      Exclude<AccessGroup, "admin" | "ct">,
       string,
     ][]),
+    ["ct", ctPassword],
   ];
   const matches: AccessGroup[] = [];
   for (const [group, expected] of candidates) {
@@ -93,7 +96,7 @@ export function sessionGroupFromCookie(
       expiry <= now ||
       !sig ||
       (role !== undefined &&
-        !["admin", "oz1", "oz2", "oz3", "oz4", "oz5"].includes(role))
+        !["admin", "oz1", "oz2", "oz3", "oz4", "oz5", "ct"].includes(role))
     )
       return null;
     const expect = Buffer.from(sign(payload));

@@ -10,6 +10,7 @@ for (const key of [
   "OZ3_ADMIN_PASSWORD",
   "OZ4_ADMIN_PASSWORD",
   "OZ5_ADMIN_PASSWORD",
+  "CT_ADMIN_PASSWORD",
 ])
   delete process.env[key];
 
@@ -39,14 +40,33 @@ test("duplicate configured passwords are rejected", () => {
   delete process.env.OZ1_ADMIN_PASSWORD;
 });
 
+test("ct group requires a configured non-empty unique password", () => {
+  assert.equal(checkPassword(""), null);
+  assert.equal(checkPassword("ct"), null);
+  process.env.CT_ADMIN_PASSWORD = "ct-only-secret";
+  assert.equal(checkPassword("ct-only-secret"), "ct");
+  assert.equal(checkPassword("global-admin-test-password"), "admin");
+  process.env.CT_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+  assert.equal(checkPassword("global-admin-test-password"), null);
+  delete process.env.CT_ADMIN_PASSWORD;
+});
+
 test("accepts signed group sessions and rejects tampering or expiry", () => {
   const expiry = Date.now() + 60_000;
-  for (const group of ["admin", "oz1", "oz2", "oz3", "oz4", "oz5"])
+  for (const group of ["admin", "oz1", "oz2", "oz3", "oz4", "oz5", "ct"])
     assert.equal(sessionGroupFromCookie(cookie(`${expiry}.${group}`)), group);
 
   const valid = cookie(`${expiry}.oz1`);
   assert.equal(sessionGroupFromCookie(`${valid.slice(0, -1)}x`), null);
   assert.equal(sessionGroupFromCookie(cookie(`${Date.now() - 1}.oz1`)), null);
+});
+
+test("group ownership isolates ct while admin remains global", () => {
+  const { canReadStoreLogs } = require("../src/lib/action-runs");
+  assert.equal(canReadStoreLogs("ct", "ct"), true);
+  assert.equal(canReadStoreLogs("ct", "oz1"), false);
+  assert.equal(canReadStoreLogs("oz1", "ct"), false);
+  assert.equal(canReadStoreLogs("admin", "ct"), true);
 });
 
 test("keeps valid legacy expiry-only session as global admin", () => {
