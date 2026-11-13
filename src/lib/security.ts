@@ -41,14 +41,33 @@ const sign = (v: string) => {
     throw new Error("SESSION_SECRET must contain at least 32 characters");
   return createHmac("sha256", secret).update(v).digest("base64url");
 };
-export function checkPassword(p: string) {
-  const expected = process.env.ADMIN_PASSWORD || "";
-  const a = Buffer.from(p),
-    b = Buffer.from(expected);
-  return !!expected && a.length === b.length && timingSafeEqual(a, b);
+export type AccessGroup = "admin" | "oz1" | "oz2" | "oz3" | "oz4" | "oz5";
+export function checkPassword(p: string): AccessGroup | null {
+  const groupPasswords: Record<Exclude<AccessGroup, "admin">, string> = {
+    oz1: process.env.OZ1_ADMIN_PASSWORD || "oz1",
+    oz2: process.env.OZ2_ADMIN_PASSWORD || "oz2",
+    oz3: process.env.OZ3_ADMIN_PASSWORD || "oz3",
+    oz4: process.env.OZ4_ADMIN_PASSWORD || "oz4",
+    oz5: process.env.OZ5_ADMIN_PASSWORD || "oz5",
+  };
+  const candidates: [AccessGroup, string][] = [
+    ["admin", process.env.ADMIN_PASSWORD || ""],
+    ...(Object.entries(groupPasswords) as [
+      Exclude<AccessGroup, "admin">,
+      string,
+    ][]),
+  ];
+  const matches: AccessGroup[] = [];
+  for (const [group, expected] of candidates) {
+    const a = Buffer.from(p),
+      b = Buffer.from(expected);
+    if (expected && a.length === b.length && timingSafeEqual(a, b))
+      matches.push(group);
+  }
+  return matches.length === 1 ? matches[0] : null;
 }
-export async function setSession() {
-  const value = `${Date.now() + 7 * 86400000}`;
+export async function setSession(group: AccessGroup = "admin") {
+  const value = `${Date.now() + 7 * 86400000}.${group}`;
   (await cookies()).set("ozon_session", `${value}.${sign(value)}`, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -57,26 +76,46 @@ export async function setSession() {
     maxAge: 604800,
   });
 }
-export async function authorized() {
+export function sessionGroupFromCookie(
+  raw: string,
+  now = Date.now(),
+): AccessGroup | null {
   try {
-    const raw = (await cookies()).get("ozon_session")?.value || "";
-    const parts = raw.split(".");
-    if (parts.length !== 2) return false;
-    const [v, sig] = parts;
+    const separator = raw.lastIndexOf(".");
+    if (separator < 1) return null;
+    const payload = raw.slice(0, separator);
+    const sig = raw.slice(separator + 1);
+    const [v, role] = payload.split(".");
     const expiry = Number(v);
     if (
       !/^\d+$/.test(v) ||
       !Number.isSafeInteger(expiry) ||
-      expiry <= Date.now() ||
-      !sig
+      expiry <= now ||
+      !sig ||
+      (role !== undefined &&
+        !["admin", "oz1", "oz2", "oz3", "oz4", "oz5"].includes(role))
     )
-      return false;
-    const expect = Buffer.from(sign(v));
+      return null;
+    const expect = Buffer.from(sign(payload));
     const got = Buffer.from(sig);
-    return got.length === expect.length && timingSafeEqual(got, expect);
+    if (got.length !== expect.length || !timingSafeEqual(got, expect))
+      return null;
+    // Before groups were introduced, the signed payload contained only expiry.
+    return (role ?? "admin") as AccessGroup;
   } catch {
-    return false;
+    return null;
   }
+}
+export async function sessionGroup(): Promise<AccessGroup | null> {
+  try {
+    const raw = (await cookies()).get("ozon_session")?.value || "";
+    return sessionGroupFromCookie(raw);
+  } catch {
+    return null;
+  }
+}
+export async function authorized() {
+  return (await sessionGroup()) !== null;
 }
 export async function clearSession() {
   (await cookies()).delete("ozon_session");

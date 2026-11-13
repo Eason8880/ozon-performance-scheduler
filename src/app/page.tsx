@@ -211,6 +211,7 @@ export default function Home() {
   const [dbPending, DP] = useState(false);
   const [loading, L] = useState(true);
   const [stores, S] = useState<Store[]>([]);
+  const [group, G] = useState("");
   const [error, E] = useState("");
   const [password, P] = useState("");
   const [busy, B] = useState(false);
@@ -243,6 +244,7 @@ export default function Home() {
         A(true);
         if (!response.ok) throw Error(result.error);
         S(result.stores);
+        G(result.group === "admin" ? "全局管理员" : `管理组 ${result.group}`);
       }
     } catch (err) {
       E(err instanceof Error ? err.message : "连接失败");
@@ -440,6 +442,7 @@ export default function Home() {
           <div className="eyebrow">OZON PERFORMANCE</div>
           <h1>按订单付款推广计划</h1>
           <p>组合多个每日时段，在选定时区为店铺开启或关闭全部商品推广。</p>
+          <p className="muted">当前身份：{group}</p>
         </div>
         <button className="quiet" onClick={logout}>
           退出

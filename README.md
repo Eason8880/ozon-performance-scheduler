@@ -34,6 +34,7 @@ npm run dev
 - `APP_SECRET`：base64 编码的 32 字节 AES key；可用 `openssl rand -base64 32` 生成。
 - `SESSION_SECRET`：至少 32 字符的随机 session 签名密钥。
 - `ADMIN_PASSWORD`：管理员登录密码。
+- `OZ1_ADMIN_PASSWORD` 至 `OZ5_ADMIN_PASSWORD`：五个独立管理组口令；未设置时分别使用 `oz1` 至 `oz5`，生产环境建议覆盖为独立强口令。组管理员只能管理自己创建的店铺；全局管理员口令仍可查看和管理全部店铺。
 
 `DATABASE_SSL` 默认遵循连接 URI 的 SSL 设置；设为 `require` 时启用证书校验，只有本地无 TLS PostgreSQL 才设为 `disable`。
 
@@ -42,7 +43,7 @@ npm run dev
 1. 将 `main` 导入 Vercel；在 Vercel 项目中选择 Node 24 或 20。连接 GitHub 后，合并 PR 到 `main` 会触发生产部署。
 2. Vercel Marketplace 已连接 Neon PostgreSQL，仅绑定 Production。数据库服务商的免费额度和条款以创建时页面为准。Preview 不绑定生产数据库或生产密钥；如果要让 Preview 可登录/执行，应另建独立免费数据库并设置 Preview 专用密钥。
 3. 在 Vercel Production 环境设置独立随机的 `APP_SECRET`、`SESSION_SECRET`、`ADMIN_PASSWORD`。Preview 不配置生产密钥或生产数据库。不要把 `.env.local` 提交到仓库。可用 `openssl rand -base64 32` 生成 AES key、`openssl rand -hex 32` 生成其余随机值。
-4. 为已连接的 Neon 数据库执行迁移：获取 Production `DATABASE_URL` 后运行 `npm run migrate`。每次发布不会在冷启动执行 DDL。若还未部署本工具的旧版本，需先创建 `stores`、`job_runs` 基础表再运行迁移。
+4. 为已连接的 Neon 数据库执行迁移：获取 Production `DATABASE_URL` 后运行 `npm run migrate`。每次发布不会在冷启动执行 DDL。若还未部署本工具的旧版本，需先创建 `stores`、`job_runs` 基础表再运行迁移。分组隔离通过 `004_store_groups` 增加 `owner_group`；既有店铺归全局管理员。
 5. 部署 Production。Preview 不连接生产数据库，也不配置生产密钥。合并部署后，检查店铺卡片的计划同步状态；对于旧店铺需通过“重试同步”或更新计划以登记新动态触发器。
 
 不要把 Preview 连接到生产数据库或复制生产密钥。合并删除静态 Cron 配置的部署后，旧 `/api/cron` 每分钟轮询任务将停止。

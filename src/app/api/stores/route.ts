@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authorized, encrypt } from "@/lib/security";
+import { sessionGroup, encrypt } from "@/lib/security";
 import { checkCredentials } from "@/lib/ozon";
 import { pool } from "@/lib/db";
 import { syncStoreSchedules } from "@/lib/store-schedules";
@@ -17,8 +17,8 @@ export async function GET() {
       },
       { status: 503 },
     );
-  if (!(await authorized()))
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  const group = await sessionGroup();
+  if (!group) return NextResponse.json({ error: "未登录" }, { status: 401 });
   try {
     const r = await pool.query(
       `select s.id,s.name,s.timezone,s.start_time,s.stop_time,
@@ -27,9 +27,10 @@ export async function GET() {
        s.enabled,s.last_action_key,s.last_action_at,s.last_error,s.created_at,
        s.schedule_status,s.schedule_error,
        coalesce((select json_agg(x) from (select action_key,action,status,detail,source,created_at from job_runs where store_id=s.id order by created_at desc limit 5) x),'[]'::json) as runs
-       from stores s order by s.created_at`,
+       from stores s where $1='admin' or s.owner_group=$1 order by s.created_at`,
+      [group],
     );
-    return NextResponse.json({ stores: r.rows });
+    return NextResponse.json({ stores: r.rows, group });
   } catch (e) {
     return NextResponse.json(
       { error: "数据库连接失败，请检查 DATABASE_URL" },
@@ -38,8 +39,8 @@ export async function GET() {
   }
 }
 export async function POST(req: Request) {
-  if (!(await authorized()))
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  const group = await sessionGroup();
+  if (!group) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const b = await req.json().catch(() => null);
   const windowsInput =
     b?.windows ??
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
     await checkCredentials(b.clientId.trim(), b.clientSecret.trim());
     const windows = normalizeWindows(windowsInput);
     const r = await pool.query(
-      "insert into stores(name,timezone,start_time,stop_time,windows,client_id,secret_enc,schedule_status,pending_config,pending_revision) values($1,$2,$3,$4,$5::jsonb,$6,$7,'pending',$8::jsonb,1) returning id,name,timezone,start_time,stop_time,windows,enabled,last_action_at,last_error,created_at,schedule_status",
+      "insert into stores(name,timezone,start_time,stop_time,windows,client_id,secret_enc,schedule_status,pending_config,pending_revision,owner_group) values($1,$2,$3,$4,$5::jsonb,$6,$7,'pending',$8::jsonb,1,nullif($9,'admin')) returning id,name,timezone,start_time,stop_time,windows,enabled,last_action_at,last_error,created_at,schedule_status",
       [
         b.name.trim(),
         b.timezone,
@@ -79,6 +80,7 @@ export async function POST(req: Request) {
         b.clientId.trim(),
         encrypt(b.clientSecret.trim()),
         JSON.stringify({ timezone: b.timezone, windows, enabled: true }),
+        group,
       ],
     );
     try {

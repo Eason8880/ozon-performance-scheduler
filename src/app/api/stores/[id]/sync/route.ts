@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authorized } from "@/lib/security";
+import { sessionGroup } from "@/lib/security";
 import { pool } from "@/lib/db";
 import { syncStoreSchedules } from "@/lib/store-schedules";
 
@@ -7,13 +7,16 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!(await authorized()))
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  const group = await sessionGroup();
+  if (!group) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id))
     return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
   try {
-    const result = await pool.query("select * from stores where id=$1", [id]);
+    const result = await pool.query(
+      "select * from stores where id=$1 and ($2='admin' or owner_group=$2)",
+      [id, group],
+    );
     if (!result.rowCount)
       return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
     const store = result.rows[0];
