@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   convertTimeBetweenTimezones,
   convertWindowsBetweenTimezones,
@@ -221,6 +221,9 @@ export default function Home() {
   const [loading, L] = useState(true);
   const [stores, S] = useState<Store[]>([]);
   const [runPages, setRunPages] = useState<Record<string, RunPageState>>({});
+  const pagingGeneration = useRef(0);
+  const pagingRequests = useRef(new Map<string, number>());
+  const pagingSequence = useRef(0);
   const [group, G] = useState("");
   const [error, E] = useState("");
   const [password, P] = useState("");
@@ -239,10 +242,21 @@ export default function Home() {
   });
 
   async function load() {
+    const generation = ++pagingGeneration.current;
+    pagingRequests.current.clear();
+    setRunPages((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([id, page]) => [
+          id,
+          { ...page, loading: false },
+        ]),
+      ),
+    );
     L(true);
     try {
       const response = await fetch("/api/stores");
       const result = await response.json();
+      if (generation !== pagingGeneration.current) return;
       if (result.code === "DATABASE_PENDING") {
         DP(true);
         A(false);
@@ -270,18 +284,28 @@ export default function Home() {
         G(result.group === "admin" ? "全局管理员" : `管理组 ${result.group}`);
       }
     } catch (err) {
+      if (generation !== pagingGeneration.current) return;
       E(err instanceof Error ? err.message : "连接失败");
     } finally {
-      L(false);
+      if (generation === pagingGeneration.current) L(false);
     }
   }
 
   async function loadMoreRuns(store: Store) {
     const page = runPages[store.id];
-    if (!page?.hasMore || page.loading || !page.cursor) return;
+    if (
+      !page?.hasMore ||
+      page.loading ||
+      !page.cursor ||
+      pagingRequests.current.has(store.id)
+    )
+      return;
+    const generation = pagingGeneration.current;
+    const requestId = ++pagingSequence.current;
+    pagingRequests.current.set(store.id, requestId);
     setRunPages((current) => ({
       ...current,
-      [store.id]: { ...page, loading: true, error: "" },
+      [store.id]: { ...(current[store.id] ?? page), loading: true, error: "" },
     }));
     try {
       const response = await fetch(
@@ -289,18 +313,21 @@ export default function Home() {
       );
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "读取失败，请重试");
-      const currentStore = stores.find((item) => item.id === store.id);
-      const existing = currentStore?.runs ?? [];
-      const seen = new Set(existing.map((run) => run.id));
-      const appended = result.items.filter(
-        (run: NonNullable<Store["runs"]>[number]) => !seen.has(run.id),
-      );
+      if (
+        generation !== pagingGeneration.current ||
+        pagingRequests.current.get(store.id) !== requestId
+      )
+        return;
       S((current) =>
-        current.map((item) =>
-          item.id === store.id
-            ? { ...item, runs: [...(item.runs ?? []), ...appended] }
-            : item,
-        ),
+        current.map((item) => {
+          if (item.id !== store.id) return item;
+          const existing = item.runs ?? [];
+          const seen = new Set(existing.map((run) => run.id));
+          const appended = result.items.filter(
+            (run: NonNullable<Store["runs"]>[number]) => !seen.has(run.id),
+          );
+          return { ...item, runs: [...existing, ...appended] };
+        }),
       );
       setRunPages((current) => ({
         ...current,
@@ -312,14 +339,22 @@ export default function Home() {
         },
       }));
     } catch (err) {
+      if (
+        generation !== pagingGeneration.current ||
+        pagingRequests.current.get(store.id) !== requestId
+      )
+        return;
       setRunPages((current) => ({
         ...current,
         [store.id]: {
-          ...page,
+          ...(current[store.id] ?? page),
           loading: false,
           error: err instanceof Error ? err.message : "读取失败，请重试",
         },
       }));
+    } finally {
+      if (pagingRequests.current.get(store.id) === requestId)
+        pagingRequests.current.delete(store.id);
     }
   }
   useEffect(() => {
@@ -463,6 +498,9 @@ export default function Home() {
     }
   }
   async function logout() {
+    pagingGeneration.current += 1;
+    pagingRequests.current.clear();
+    setRunPages({});
     await fetch("/api/logout", { method: "POST" });
     A(false);
   }

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   decodeActionRunCursor,
   encodeActionRunCursor,
@@ -96,4 +97,18 @@ test("store log access respects group ownership", () => {
   assert.equal(canReadStoreLogs("oz1", "oz1"), true);
   assert.equal(canReadStoreLogs("oz1", "oz2"), false);
   assert.equal(canReadStoreLogs("admin", "oz2"), true);
+});
+
+test("log queries break same-timestamp ties by the numeric database ID", () => {
+  const initialPage = readFileSync("src/app/api/stores/route.ts", "utf8");
+  const nextPage = readFileSync(
+    "src/app/api/stores/[id]/runs/route.ts",
+    "utf8",
+  );
+
+  // Text ordering would put 9 ahead of 11; both queries must order by the
+  // qualified BIGINT column, not the response's id::text alias.
+  assert.notDeepEqual(["9", "10", "11"].sort().reverse(), ["11", "10", "9"]);
+  assert.match(initialPage, /order by j\.created_at desc,\s*j\.id desc/i);
+  assert.match(nextPage, /order by j\.created_at desc,\s*j\.id desc/i);
 });

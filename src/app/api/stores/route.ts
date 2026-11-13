@@ -31,10 +31,10 @@ export async function GET() {
        from stores s
        left join lateral (
          select json_agg(x) as rows from (
-           select id::text as id, action_key,action,status,detail,source,
-             to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_at
-           from job_runs where store_id=s.id
-           order by created_at desc,id desc limit 6
+           select j.id::text as id, j.action_key,j.action,j.status,j.detail,j.source,
+             to_char(j.created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_at
+           from job_runs j where j.store_id=s.id
+           order by j.created_at desc,j.id desc limit 6
          ) x
        ) logs on true
        where $1='admin' or s.owner_group=$1 order by s.created_at`,

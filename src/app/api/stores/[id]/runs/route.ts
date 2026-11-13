@@ -37,12 +37,12 @@ export async function GET(
       return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
 
     const runs = await pool.query<ActionRunRow>(
-      `select id::text as id, action_key,action,status,detail,source,
-         to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_at
-       from job_runs
-       where store_id=$1
-         and ($2::timestamptz is null or (created_at,id)<($2::timestamptz,$3::bigint))
-       order by created_at desc,id desc limit 6`,
+      `select j.id::text as id, j.action_key,j.action,j.status,j.detail,j.source,
+         to_char(j.created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_at
+       from job_runs j
+       where j.store_id=$1
+         and ($2::timestamptz is null or (j.created_at,j.id)<($2::timestamptz,$3::bigint))
+       order by j.created_at desc,j.id desc limit 6`,
       [id, cursor?.createdAt ?? null, cursor?.id ?? null],
     );
     return NextResponse.json(pageActionRuns(runs.rows));
