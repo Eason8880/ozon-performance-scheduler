@@ -228,6 +228,8 @@ export default function Home() {
   const [error, E] = useState("");
   const [password, P] = useState("");
   const [busy, B] = useState(false);
+  const [addDialogOpen, ADO] = useState(false);
+  const addDialog = useRef<HTMLDialogElement>(null);
   const [editing, I] = useState<string | null>(null);
   const [editForm, EF] = useState({
     windows: [] as TimeWindow[],
@@ -241,7 +243,7 @@ export default function Home() {
     timezone: "Europe/Moscow",
   });
 
-  async function load() {
+  async function load(showLoading = true) {
     const generation = ++pagingGeneration.current;
     pagingRequests.current.clear();
     setRunPages((current) =>
@@ -252,7 +254,7 @@ export default function Home() {
         ]),
       ),
     );
-    L(true);
+    if (showLoading) L(true);
     try {
       const response = await fetch("/api/stores");
       const result = await response.json();
@@ -287,7 +289,7 @@ export default function Home() {
       if (generation !== pagingGeneration.current) return;
       E(err instanceof Error ? err.message : "连接失败");
     } finally {
-      if (generation === pagingGeneration.current) L(false);
+      if (showLoading && generation === pagingGeneration.current) L(false);
     }
   }
 
@@ -398,13 +400,17 @@ export default function Home() {
       if (!response.ok) {
         E(result.error || "添加失败");
         if (result.store) {
-          F({ ...form, clientId: "", clientSecret: "" });
-          await load();
+          F({ ...form, name: "", clientId: "", clientSecret: "", windows: [] });
+          addDialog.current?.close();
+          ADO(false);
+          await load(false);
         }
         return;
       }
       F({ ...form, name: "", clientId: "", clientSecret: "", windows: [] });
-      await load();
+      addDialog.current?.close();
+      ADO(false);
+      await load(false);
     } catch {
       E("无法连接服务，请稍后重试");
     } finally {
@@ -556,12 +562,46 @@ export default function Home() {
           退出
         </button>
       </header>
-      {error && <div className="error banner">{error}</div>}
       <section className="panel">
-        <h2>授权店铺</h2>
-        <p className="muted">
-          添加时会验证 Performance API 凭据。客户端密钥仅以加密形式存储。
-        </p>
+        <div className="row">
+          <div>
+            <h2>授权店铺</h2>
+            <p className="muted">添加并管理已授权店铺。</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              E("");
+              addDialog.current?.showModal();
+              ADO(true);
+            }}
+          >
+            添加授权店铺
+          </button>
+        </div>
+      </section>
+      <dialog
+        className="add-dialog"
+        ref={addDialog}
+        aria-labelledby="add-store-title"
+        onClose={() => ADO(false)}
+      >
+        <div className="row dialog-heading">
+          <div>
+            <h2 id="add-store-title">添加授权店铺</h2>
+            <p className="muted">
+              添加时会验证 Performance API 凭据。客户端密钥仅以加密形式存储。
+            </p>
+          </div>
+          <button
+            className="quiet"
+            type="button"
+            aria-label="关闭"
+            onClick={() => addDialog.current?.close()}
+          >
+            关闭
+          </button>
+        </div>
         <form className="grid" onSubmit={addStore}>
           <label>
             店铺名称
@@ -569,6 +609,7 @@ export default function Home() {
               value={form.name}
               onChange={(event) => F({ ...form, name: event.target.value })}
               required
+              autoFocus
             />
           </label>
           <label>
@@ -621,11 +662,17 @@ export default function Home() {
         <p className="note">
           预设时段仅供参考。开启时段按左闭右开计算；多个时段会合并判断，重叠输入会被拒绝。
         </p>
-      </section>
+        {error && addDialogOpen && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+      </dialog>
+      {error && !addDialogOpen && <div className="error banner">{error}</div>}
       <section className="panel">
         <div className="row">
           <h2>店铺计划</h2>
-          <button className="quiet" onClick={load}>
+          <button className="quiet" onClick={() => void load()}>
             刷新
           </button>
         </div>

@@ -60,6 +60,27 @@ p {
   margin: 16px 0;
   box-shadow: 0 5px 20px #152d4c08;
 }
+.add-dialog {
+  width: min(760px, calc(100vw - 28px));
+  max-height: min(88vh, 900px);
+  overflow-y: auto;
+  border: 1px solid #e1e8f1;
+  border-radius: 14px;
+  padding: 24px;
+  color: #17233a;
+  box-shadow: 0 20px 70px #10223b40;
+}
+.add-dialog::backdrop {
+  background: #14233b80;
+  backdrop-filter: blur(2px);
+}
+.dialog-heading {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+.dialog-heading h2 {
+  margin-bottom: 4px;
+}
 .login {
   max-width: 420px;
   margin: 12vh auto;
@@ -193,6 +214,9 @@ footer {
     font-size: 24px;
   }
   .panel {
+    padding: 18px;
+  }
+  .add-dialog {
     padding: 18px;
   }
   .actions {
