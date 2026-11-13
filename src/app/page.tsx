@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   convertTimeBetweenTimezones,
   convertWindowsBetweenTimezones,
@@ -30,6 +30,7 @@ type Store = {
   schedule_status?: string;
   schedule_error?: string | null;
   runs?: {
+    id: string;
     action_key: string;
     action: string;
     status: string;
@@ -37,6 +38,14 @@ type Store = {
     source: ActionSource;
     created_at: string;
   }[];
+  runsHasMore?: boolean;
+  runsNextCursor?: string | null;
+};
+type RunPageState = {
+  cursor: string | null;
+  hasMore: boolean;
+  loading: boolean;
+  error: string;
 };
 
 const presets: Preset[] = [
@@ -211,6 +220,10 @@ export default function Home() {
   const [dbPending, DP] = useState(false);
   const [loading, L] = useState(true);
   const [stores, S] = useState<Store[]>([]);
+  const [runPages, setRunPages] = useState<Record<string, RunPageState>>({});
+  const pagingGeneration = useRef(0);
+  const pagingRequests = useRef(new Map<string, number>());
+  const pagingSequence = useRef(0);
   const [group, G] = useState("");
   const [error, E] = useState("");
   const [password, P] = useState("");
@@ -229,10 +242,21 @@ export default function Home() {
   });
 
   async function load() {
+    const generation = ++pagingGeneration.current;
+    pagingRequests.current.clear();
+    setRunPages((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([id, page]) => [
+          id,
+          { ...page, loading: false },
+        ]),
+      ),
+    );
     L(true);
     try {
       const response = await fetch("/api/stores");
       const result = await response.json();
+      if (generation !== pagingGeneration.current) return;
       if (result.code === "DATABASE_PENDING") {
         DP(true);
         A(false);
@@ -244,12 +268,93 @@ export default function Home() {
         A(true);
         if (!response.ok) throw Error(result.error);
         S(result.stores);
+        setRunPages(
+          Object.fromEntries(
+            result.stores.map((store: Store) => [
+              store.id,
+              {
+                cursor: store.runsNextCursor ?? null,
+                hasMore: Boolean(store.runsHasMore),
+                loading: false,
+                error: "",
+              },
+            ]),
+          ),
+        );
         G(result.group === "admin" ? "全局管理员" : `管理组 ${result.group}`);
       }
     } catch (err) {
+      if (generation !== pagingGeneration.current) return;
       E(err instanceof Error ? err.message : "连接失败");
     } finally {
-      L(false);
+      if (generation === pagingGeneration.current) L(false);
+    }
+  }
+
+  async function loadMoreRuns(store: Store) {
+    const page = runPages[store.id];
+    if (
+      !page?.hasMore ||
+      page.loading ||
+      !page.cursor ||
+      pagingRequests.current.has(store.id)
+    )
+      return;
+    const generation = pagingGeneration.current;
+    const requestId = ++pagingSequence.current;
+    pagingRequests.current.set(store.id, requestId);
+    setRunPages((current) => ({
+      ...current,
+      [store.id]: { ...(current[store.id] ?? page), loading: true, error: "" },
+    }));
+    try {
+      const response = await fetch(
+        `/api/stores/${store.id}/runs?cursor=${encodeURIComponent(page.cursor)}`,
+      );
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "读取失败，请重试");
+      if (
+        generation !== pagingGeneration.current ||
+        pagingRequests.current.get(store.id) !== requestId
+      )
+        return;
+      S((current) =>
+        current.map((item) => {
+          if (item.id !== store.id) return item;
+          const existing = item.runs ?? [];
+          const seen = new Set(existing.map((run) => run.id));
+          const appended = result.items.filter(
+            (run: NonNullable<Store["runs"]>[number]) => !seen.has(run.id),
+          );
+          return { ...item, runs: [...existing, ...appended] };
+        }),
+      );
+      setRunPages((current) => ({
+        ...current,
+        [store.id]: {
+          cursor: result.nextCursor,
+          hasMore: result.hasMore,
+          loading: false,
+          error: "",
+        },
+      }));
+    } catch (err) {
+      if (
+        generation !== pagingGeneration.current ||
+        pagingRequests.current.get(store.id) !== requestId
+      )
+        return;
+      setRunPages((current) => ({
+        ...current,
+        [store.id]: {
+          ...(current[store.id] ?? page),
+          loading: false,
+          error: err instanceof Error ? err.message : "读取失败，请重试",
+        },
+      }));
+    } finally {
+      if (pagingRequests.current.get(store.id) === requestId)
+        pagingRequests.current.delete(store.id);
     }
   }
   useEffect(() => {
@@ -393,6 +498,9 @@ export default function Home() {
     }
   }
   async function logout() {
+    pagingGeneration.current += 1;
+    pagingRequests.current.clear();
+    setRunPages({});
     await fetch("/api/logout", { method: "POST" });
     A(false);
   }
@@ -584,9 +692,9 @@ export default function Home() {
                 {store.runs && store.runs.length > 0 && (
                   <details className="logs">
                     <summary>最近记录（店铺时区 / 北京时间）</summary>
-                    {store.runs.map((run, index) => (
+                    {store.runs.map((run) => (
                       <p
-                        key={index}
+                        key={run.id}
                         className={run.status === "failed" ? "error" : "muted"}
                       >
                         {formatActionTime(run.created_at, store.timezone)} ·{" "}
@@ -596,6 +704,22 @@ export default function Home() {
                           : ""}
                       </p>
                     ))}
+                    {runPages[store.id]?.hasMore && (
+                      <button
+                        type="button"
+                        className="quiet"
+                        disabled={runPages[store.id]?.loading}
+                        aria-busy={runPages[store.id]?.loading}
+                        onClick={() => void loadMoreRuns(store)}
+                      >
+                        {runPages[store.id]?.loading ? "正在加载…" : "加载更多"}
+                      </button>
+                    )}
+                    {runPages[store.id]?.error && (
+                      <p className="error" role="alert">
+                        {runPages[store.id].error}
+                      </p>
+                    )}
                   </details>
                 )}
                 {editing === store.id && (
