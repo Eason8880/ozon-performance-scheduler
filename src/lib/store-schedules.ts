@@ -80,15 +80,56 @@ export async function ensureDynamicSchedule(
   }
 }
 
-export async function deleteSchedules(names: string[]) {
-  const outcomes = await Promise.allSettled(
-    names.map((name) => Schedules.delete({ name })),
-  );
+export async function provisionScheduleSet(
+  definitions: ReturnType<typeof scheduleDefinitions>,
+  ensure: (definition: (typeof definitions)[number]) => Promise<void>,
+  onFailure: (error: unknown) => Promise<void>,
+) {
+  try {
+    for (const definition of definitions) await ensure(definition);
+  } catch (error) {
+    await onFailure(error);
+    throw new Error("Schedule provisioning failed; retry synchronization");
+  }
+}
+
+export async function removeScheduleSet(
+  names: string[],
+  remove: (name: string) => Promise<void> = (name) =>
+    Schedules.delete({ name }),
+) {
+  const outcomes = await Promise.allSettled(names.map((name) => remove(name)));
   const failed = outcomes.find(
     (outcome) =>
       outcome.status === "rejected" && !isCode(outcome.reason, "not_found"),
   );
   if (failed?.status === "rejected") throw failed.reason;
+}
+
+export async function cleanupScheduleSet(
+  names: string[],
+  remove: (names: string[]) => Promise<void>,
+  persistPending: (names: string[]) => Promise<void>,
+) {
+  try {
+    await remove(names);
+    return true;
+  } catch {
+    await persistPending(names);
+    return false;
+  }
+}
+
+export async function deleteSchedules(names: string[]) {
+  await removeScheduleSet(names);
+}
+
+export function isCurrentScheduleRevision(
+  enabled: boolean,
+  activeRevision: number,
+  payloadRevision: number,
+) {
+  return enabled && activeRevision === payloadRevision;
 }
 
 export async function syncStoreSchedules(
@@ -130,6 +171,8 @@ async function syncStoreSchedulesUnlocked(
     [storeId],
   );
   if (!current.rowCount) throw new Error("Store no longer exists");
+  if (["deleting", "delete_pending"].includes(current.rows[0].schedule_status))
+    throw new Error("Store deletion is pending; synchronize is disabled");
   const activeRevision = Number(current.rows[0].schedule_revision);
   const pendingConfig = current.rows[0]
     .pending_config as StoreScheduleConfig | null;
@@ -161,14 +204,18 @@ async function syncStoreSchedulesUnlocked(
   );
 
   try {
-    for (const definition of definitions)
-      await ensureDynamicSchedule(definition);
-  } catch (error) {
-    await client.query(
-      "update stores set schedule_status='failed',schedule_error=$1 where id=$2",
-      [safeScheduleError(error), storeId],
+    await provisionScheduleSet(
+      definitions,
+      ensureDynamicSchedule,
+      async (error) => {
+        await client.query(
+          "update stores set schedule_status='failed',schedule_error=$1 where id=$2",
+          [safeScheduleError(error), storeId],
+        );
+      },
     );
-    throw new Error("Schedule provisioning failed; retry synchronization");
+  } catch (error) {
+    throw error;
   }
 
   try {
@@ -212,19 +259,19 @@ async function syncStoreSchedulesUnlocked(
     // The session-level advisory lock stays held across the transaction.
   }
 
-  try {
-    await deleteSchedules(oldNames);
+  await cleanupScheduleSet(oldNames, deleteSchedules, async (names) => {
+    await client.query(
+      `update stores set retired_schedule_names=$1,schedule_status='cleanup_pending',
+         schedule_error='Old schedules could not be removed' where id=$2`,
+      [names, storeId],
+    );
+  }).then(async (cleaned) => {
+    if (!cleaned) return;
     await client.query(
       "update stores set retired_schedule_names='{}',schedule_status=$1,schedule_error=null where id=$2",
       [config.enabled ? "active" : "disabled", storeId],
     );
-  } catch {
-    await client.query(
-      `update stores set retired_schedule_names=$1,schedule_status='cleanup_pending',
-       schedule_error='Old schedules could not be removed' where id=$2`,
-      [oldNames, storeId],
-    );
-  }
+  });
 
   if (config.enabled) {
     try {

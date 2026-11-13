@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authorized } from "@/lib/security";
 import { pool } from "@/lib/db";
 import {
+  cleanupScheduleSet,
   deleteSchedules,
   syncStoreSchedules,
   type StoreScheduleConfig,
@@ -98,14 +99,18 @@ export async function DELETE(
         ...(found.rows[0].retired_schedule_names ?? []),
         ...(found.rows[0].pending_schedule_names ?? []),
       ];
-      try {
-        await deleteSchedules(names);
-      } catch {
-        await lockClient.query(
-          `update stores set schedule_status='delete_pending',
+      const cleaned = await cleanupScheduleSet(
+        names,
+        deleteSchedules,
+        async () => {
+          await lockClient.query(
+            `update stores set schedule_status='delete_pending',
            schedule_error='Schedules could not be removed' where id=$1`,
-          [id],
-        );
+            [id],
+          );
+        },
+      );
+      if (!cleaned) {
         return NextResponse.json(
           { error: "店铺已停用，但定时任务删除失败；请再次删除以重试清理。" },
           { status: 503 },
@@ -114,11 +119,20 @@ export async function DELETE(
       await lockClient.query("delete from stores where id=$1", [id]);
       return NextResponse.json({ ok: true });
     } finally {
-      if (acquired)
-        await lockClient
-          .query("select pg_advisory_unlock(hashtext($1))", [lockKey])
-          .catch(() => undefined);
-      lockClient.release();
+      if (acquired) {
+        try {
+          await lockClient.query("select pg_advisory_unlock(hashtext($1))", [
+            lockKey,
+          ]);
+          lockClient.release();
+        } catch (error) {
+          lockClient.release(
+            error instanceof Error ? error : new Error("unlock failed"),
+          );
+        }
+      } else {
+        lockClient.release();
+      }
     }
   } catch {
     return NextResponse.json({ error: "删除失败" }, { status: 503 });

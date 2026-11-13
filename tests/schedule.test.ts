@@ -6,7 +6,14 @@ import {
   convertWindowsBetweenTimezones,
   validateWindows,
 } from "../src/lib/windows";
-import { dailyEdges, scheduleDefinitions } from "../src/lib/store-schedules";
+import {
+  cleanupScheduleSet,
+  dailyEdges,
+  isCurrentScheduleRevision,
+  provisionScheduleSet,
+  scheduleDefinitions,
+} from "../src/lib/store-schedules";
+import { retryDirective } from "../src/lib/queue-retry";
 
 const oneWindow = (start: string, stop: string) => [{ start, stop }];
 
@@ -208,4 +215,103 @@ test("daily edge plan handles midnight and omits transitions for a full-day unio
     [],
   );
   assert.deepEqual(dailyEdges([]), []);
+});
+
+test("a partial schedule create failure leaves revision and task names retryable", async () => {
+  const definitions = scheduleDefinitions(
+    "23456789-abcd-1234-abcd-123456789012",
+    8,
+    {
+      timezone: "Europe/Moscow",
+      windows: [
+        { start: "09:00", stop: "11:00" },
+        { start: "19:00", stop: "23:00" },
+      ],
+      enabled: true,
+    },
+  );
+  const state = {
+    status: "syncing",
+    pendingRevision: 8,
+    pendingNames: definitions.map(({ name }) => name),
+  };
+  let calls = 0;
+  await assert.rejects(
+    provisionScheduleSet(
+      definitions,
+      async () => {
+        calls++;
+        if (calls === 2) throw { code: "service_unavailable" };
+      },
+      async () => {
+        state.status = "failed";
+      },
+    ),
+    /Schedule provisioning failed/,
+  );
+  assert.equal(state.status, "failed");
+  assert.equal(state.pendingRevision, 8);
+  assert.deepEqual(
+    state.pendingNames,
+    definitions.map(({ name }) => name),
+  );
+
+  const retried: string[] = [];
+  await provisionScheduleSet(
+    definitions,
+    async ({ name }) => {
+      retried.push(name);
+    },
+    async () => assert.fail("retry unexpectedly failed"),
+  );
+  assert.deepEqual(retried, state.pendingNames);
+});
+
+test("failed schedule cleanup retains names for retry", async () => {
+  const pendingNames: string[][] = [];
+  const names = ["old-on", "old-off"];
+  const cleaned = await cleanupScheduleSet(
+    names,
+    async () => {
+      throw { code: "service_unavailable" };
+    },
+    async (retained) => {
+      pendingNames.push(retained);
+    },
+  );
+  assert.equal(cleaned, false);
+  assert.deepEqual(pendingNames[0], names);
+  const retried = await cleanupScheduleSet(
+    pendingNames[0],
+    async () => undefined,
+    async () => assert.fail("successful retry must not mark pending"),
+  );
+  assert.equal(retried, true);
+});
+
+test("stale or disabled schedule revisions are rejected", () => {
+  assert.equal(isCurrentScheduleRevision(true, 8, 7), false);
+  assert.equal(isCurrentScheduleRevision(false, 8, 8), false);
+  assert.equal(isCurrentScheduleRevision(true, 8, 8), true);
+});
+
+test("a late queue event is evaluated against current desired state", () => {
+  const delayed = desiredState(
+    new Date("2026-11-13T18:00:00Z"),
+    "Europe/Moscow",
+    oneWindow("09:00", "21:00"),
+  );
+  assert.deepEqual(delayed, {
+    active: false,
+    key: "off:2026-11-13T21:00",
+  });
+});
+
+test("queue retries back off and stop after six deliveries", () => {
+  assert.deepEqual(retryDirective(1), { afterSeconds: 60 });
+  assert.deepEqual(retryDirective(2), { afterSeconds: 300 });
+  assert.deepEqual(retryDirective(3), { afterSeconds: 900 });
+  assert.deepEqual(retryDirective(4), { afterSeconds: 3600 });
+  assert.deepEqual(retryDirective(5), { afterSeconds: 3600 });
+  assert.deepEqual(retryDirective(6), { acknowledge: true });
 });

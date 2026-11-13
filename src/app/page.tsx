@@ -284,6 +284,10 @@ export default function Home() {
       const result = await response.json();
       if (!response.ok) {
         E(result.error || "添加失败");
+        if (result.store) {
+          F({ ...form, clientId: "", clientSecret: "" });
+          await load();
+        }
         return;
       }
       F({ ...form, name: "", clientId: "", clientSecret: "", windows: [] });
