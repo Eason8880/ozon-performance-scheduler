@@ -11,7 +11,11 @@ async function main() {
       "create table if not exists schema_migrations (version text primary key, applied_at timestamptz not null default now())",
     );
     let applied = 0;
-    for (const version of ["001_initial", "002_event_schedules"]) {
+    for (const version of [
+      "001_initial",
+      "002_event_schedules",
+      "003_job_run_source",
+    ]) {
       const already = await client.query(
         "select 1 from schema_migrations where version=$1",
         [version],

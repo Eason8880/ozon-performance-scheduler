@@ -6,8 +6,13 @@ import { desiredState } from "@/lib/schedule";
 import { setPromotion } from "@/lib/ozon";
 import { isCurrentScheduleRevision } from "@/lib/store-schedules";
 import { retryQueueMessage } from "@/lib/queue-retry";
+import type { ActionSource } from "@/lib/action-log";
 
-type EdgePayload = { storeId: string; revision: number };
+type EdgePayload = {
+  storeId: string;
+  revision: number;
+  source?: ActionSource;
+};
 
 export const maxDuration = 60;
 const queueCallback = handleCallback<
@@ -25,6 +30,12 @@ const queueCallback = handleCallback<
     ) {
       throw new Error("Invalid schedule payload");
     }
+    const source: ActionSource = scheduled
+      ? "scheduled"
+      : payload.source &&
+          ["initial_sync", "config_sync", "state_sync"].includes(payload.source)
+        ? payload.source
+        : "state_sync";
 
     const client = await pool.connect();
     const lockId = payload.storeId;
@@ -78,12 +89,13 @@ const queueCallback = handleCallback<
           store.id,
         ]);
         await client.query(
-          "insert into job_runs(store_id,action_key,action,status,detail) values($1,$2,$3,'failed',$4)",
+          "insert into job_runs(store_id,action_key,action,status,detail,source) values($1,$2,$3,'failed',$4,$5)",
           [
             store.id,
             target.key,
             target.active ? "activate" : "deactivate",
             detail,
+            source,
           ],
         );
         throw new Error(detail);
@@ -96,14 +108,15 @@ const queueCallback = handleCallback<
           [target.key, store.id],
         );
         await client.query(
-          "insert into job_runs(store_id,action_key,action,status,detail) values($1,$2,$3,'success',$4)",
+          "insert into job_runs(store_id,action_key,action,status,detail,source) values($1,$2,$3,'success',$4,$5)",
           [
             store.id,
             target.key,
             target.active ? "activate" : "deactivate",
             scheduled
               ? `schedule execution ${(message as ScheduleQueueMessage<EdgePayload>).executionId}`
-              : "initial state synchronization",
+              : source,
+            source,
           ],
         );
         await client.query("commit");
