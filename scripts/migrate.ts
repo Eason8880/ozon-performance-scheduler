@@ -15,6 +15,7 @@ async function main() {
       "001_initial",
       "002_event_schedules",
       "003_job_run_source",
+      "004_store_groups",
     ]) {
       const already = await client.query(
         "select 1 from schema_migrations where version=$1",

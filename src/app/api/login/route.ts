@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { checkPassword, setSession } from "@/lib/security";
 export async function POST(req: Request) {
-  const { password } = await req.json().catch(() => ({}));
-  if (typeof password !== "string" || !checkPassword(password))
+  const body = await req.json().catch(() => null);
+  const password = body && typeof body === "object" ? body.password : undefined;
+  const group = typeof password === "string" ? checkPassword(password) : null;
+  if (!group)
     return NextResponse.json({ error: "登录信息无效" }, { status: 401 });
-  await setSession();
-  return NextResponse.json({ ok: true });
+  await setSession(group);
+  return NextResponse.json({ ok: true, group });
 }

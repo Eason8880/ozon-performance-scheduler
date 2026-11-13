@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authorized } from "@/lib/security";
+import { sessionGroup } from "@/lib/security";
 import { pool } from "@/lib/db";
 import {
   cleanupScheduleSet,
@@ -16,8 +16,8 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!(await authorized()))
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  const group = await sessionGroup();
+  if (!group) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id))
     return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
@@ -39,7 +39,10 @@ export async function PATCH(
     );
   try {
     const windows = normalizeWindows(windowsInput);
-    const exists = await pool.query("select id from stores where id=$1", [id]);
+    const exists = await pool.query(
+      "select id from stores where id=$1 and ($2='admin' or owner_group=$2)",
+      [id, group],
+    );
     if (!exists.rowCount)
       return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
     const config: StoreScheduleConfig = {
@@ -49,8 +52,8 @@ export async function PATCH(
     };
     await syncStoreSchedules(id, config, "config_sync");
     const ready = await pool.query(
-      "select id,name,timezone,start_time,stop_time,windows,enabled,last_action_at,last_error,created_at,schedule_status,schedule_error from stores where id=$1",
-      [id],
+      "select id,name,timezone,start_time,stop_time,windows,enabled,last_action_at,last_error,created_at,schedule_status,schedule_error from stores where id=$1 and ($2='admin' or owner_group=$2)",
+      [id, group],
     );
     return NextResponse.json({ store: ready.rows[0] });
   } catch {
@@ -64,8 +67,8 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!(await authorized()))
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  const group = await sessionGroup();
+  if (!group) return NextResponse.json({ error: "未登录" }, { status: 401 });
   try {
     const { id } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id))
@@ -85,8 +88,8 @@ export async function DELETE(
           { status: 409 },
         );
       const found = await lockClient.query(
-        "select schedule_names,retired_schedule_names,pending_schedule_names from stores where id=$1",
-        [id],
+        "select schedule_names,retired_schedule_names,pending_schedule_names from stores where id=$1 and ($2='admin' or owner_group=$2)",
+        [id, group],
       );
       if (!found.rowCount)
         return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
