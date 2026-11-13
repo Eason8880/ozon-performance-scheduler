@@ -5,6 +5,11 @@ import {
   convertTimeBetweenTimezones,
   convertWindowsBetweenTimezones,
 } from "@/lib/windows";
+import {
+  describeAction,
+  formatActionTime,
+  type ActionSource,
+} from "@/lib/action-log";
 
 type TimeWindow = { start: string; stop: string };
 type Preset = {
@@ -29,6 +34,7 @@ type Store = {
     action: string;
     status: string;
     detail: string | null;
+    source: ActionSource;
     created_at: string;
   }[];
 };
@@ -535,15 +541,16 @@ export default function Home() {
                   ))}
                   <small>每天 · {store.windows.length} 个时段</small>
                 </div>
-                {store.last_action_at && (
+                {store.runs?.[0] && (
                   <p className="muted">
-                    最近执行：
-                    {store.last_action_key?.startsWith("on:")
-                      ? "开启"
-                      : store.last_action_key?.startsWith("off:")
-                        ? "关闭"
-                        : "同步"}{" "}
-                    · {new Date(store.last_action_at).toLocaleString()}
+                    最近结果：
+                    {describeAction(
+                      store.runs[0].source,
+                      store.runs[0].action,
+                      store.runs[0].status,
+                    )}{" "}
+                    ·{" "}
+                    {formatActionTime(store.runs[0].created_at, store.timezone)}
                   </p>
                 )}
                 {store.schedule_status &&
@@ -573,17 +580,17 @@ export default function Home() {
                 )}
                 {store.runs && store.runs.length > 0 && (
                   <details className="logs">
-                    <summary>最近执行记录</summary>
+                    <summary>最近记录（店铺时区 / 北京时间）</summary>
                     {store.runs.map((run, index) => (
                       <p
                         key={index}
                         className={run.status === "failed" ? "error" : "muted"}
                       >
-                        {new Date(run.created_at).toLocaleString()} ·{" "}
-                        {run.action === "activate" ? "开启" : "关闭"} ·{" "}
-                        {run.status === "success"
-                          ? "成功"
-                          : run.detail || "失败"}
+                        {formatActionTime(run.created_at, store.timezone)} ·{" "}
+                        {describeAction(run.source, run.action, run.status)}
+                        {run.status !== "success" && run.detail
+                          ? ` · ${run.detail}`
+                          : ""}
                       </p>
                     ))}
                   </details>

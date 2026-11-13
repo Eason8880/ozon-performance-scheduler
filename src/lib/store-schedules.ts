@@ -3,6 +3,7 @@ import { send } from "@vercel/queue";
 import type { PoolClient } from "pg";
 import { normalizeWindows, type TimeWindow } from "./windows";
 import { pool } from "./db";
+import type { ActionSource } from "./action-log";
 
 export const STORE_SCHEDULE_TOPIC = "ozon-promo-edge";
 export type StoreScheduleConfig = {
@@ -58,7 +59,7 @@ export function scheduleDefinitions(
       },
       timezone: config.timezone,
       target: { topic: STORE_SCHEDULE_TOPIC },
-      payload: { storeId, revision },
+      payload: { storeId, revision, source: "scheduled" as const },
     };
   });
 }
@@ -135,6 +136,10 @@ export function isCurrentScheduleRevision(
 export async function syncStoreSchedules(
   storeId: string,
   config: StoreScheduleConfig,
+  source: Extract<
+    ActionSource,
+    "initial_sync" | "config_sync" | "state_sync"
+  > = "state_sync",
 ) {
   const lockClient = await pool.connect();
   // Keep the key compatible with the old polling handler during rollout.
@@ -146,7 +151,7 @@ export async function syncStoreSchedules(
     );
     if (!locked.rows[0].acquired)
       throw new Error("A schedule update is already running for this store");
-    await syncStoreSchedulesUnlocked(storeId, config, lockClient);
+    await syncStoreSchedulesUnlocked(storeId, config, source, lockClient);
   } finally {
     try {
       await lockClient.query("select pg_advisory_unlock(hashtext($1))", [
@@ -164,6 +169,7 @@ export async function syncStoreSchedules(
 async function syncStoreSchedulesUnlocked(
   storeId: string,
   config: StoreScheduleConfig,
+  source: Extract<ActionSource, "initial_sync" | "config_sync" | "state_sync">,
   client: PoolClient,
 ) {
   const current = await client.query(
@@ -276,7 +282,7 @@ async function syncStoreSchedulesUnlocked(
 
   if (config.enabled) {
     try {
-      await send(STORE_SCHEDULE_TOPIC, { storeId, revision });
+      await send(STORE_SCHEDULE_TOPIC, { storeId, revision, source });
     } catch {
       await client.query(
         "update stores set schedule_status='action_pending',schedule_error='Initial state synchronization is pending' where id=$1",

@@ -26,7 +26,7 @@ export async function GET() {
          else jsonb_build_array(jsonb_build_object('start',s.start_time,'stop',s.stop_time)) end as windows,
        s.enabled,s.last_action_key,s.last_action_at,s.last_error,s.created_at,
        s.schedule_status,s.schedule_error,
-       coalesce((select json_agg(x) from (select action_key,action,status,detail,created_at from job_runs where store_id=s.id order by created_at desc limit 5) x),'[]'::json) as runs
+       coalesce((select json_agg(x) from (select action_key,action,status,detail,source,created_at from job_runs where store_id=s.id order by created_at desc limit 5) x),'[]'::json) as runs
        from stores s order by s.created_at`,
     );
     return NextResponse.json({ stores: r.rows });
@@ -82,11 +82,15 @@ export async function POST(req: Request) {
       ],
     );
     try {
-      await syncStoreSchedules(r.rows[0].id, {
-        timezone: b.timezone,
-        windows,
-        enabled: true,
-      });
+      await syncStoreSchedules(
+        r.rows[0].id,
+        {
+          timezone: b.timezone,
+          windows,
+          enabled: true,
+        },
+        "initial_sync",
+      );
     } catch {
       return NextResponse.json(
         {

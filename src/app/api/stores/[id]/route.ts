@@ -47,7 +47,7 @@ export async function PATCH(
       windows: normalizeWindows(windows),
       enabled: b.enabled,
     };
-    await syncStoreSchedules(id, config);
+    await syncStoreSchedules(id, config, "config_sync");
     const ready = await pool.query(
       "select id,name,timezone,start_time,stop_time,windows,enabled,last_action_at,last_error,created_at,schedule_status,schedule_error from stores where id=$1",
       [id],

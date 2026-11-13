@@ -199,6 +199,7 @@ test("daily Vercel schedules follow union edges and timezone", () => {
   assert.deepEqual(schedules[0].payload, {
     storeId: "12345678-1234-1234-1234-123456789012",
     revision: 5,
+    source: "scheduled",
   });
 });
 
