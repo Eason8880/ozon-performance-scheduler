@@ -21,6 +21,9 @@ type Store = {
   enabled: boolean;
   last_action_at: string | null;
   last_error: string | null;
+  last_action_key?: string | null;
+  schedule_status?: string;
+  schedule_error?: string | null;
   runs?: {
     action_key: string;
     action: string;
@@ -358,6 +361,25 @@ export default function Home() {
       B(false);
     }
   }
+  async function retrySync(store: Store) {
+    B(true);
+    E("");
+    try {
+      const response = await fetch(`/api/stores/${store.id}/sync`, {
+        method: "POST",
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        E(result.error || "计划同步失败");
+        return;
+      }
+      await load();
+    } catch {
+      E("无法连接服务，请稍后重试");
+    } finally {
+      B(false);
+    }
+  }
   async function logout() {
     await fetch("/api/logout", { method: "POST" });
     A(false);
@@ -511,9 +533,29 @@ export default function Home() {
                 </div>
                 {store.last_action_at && (
                   <p className="muted">
-                    最近执行：{new Date(store.last_action_at).toLocaleString()}
+                    最近执行：
+                    {store.last_action_key?.startsWith("on:")
+                      ? "开启"
+                      : store.last_action_key?.startsWith("off:")
+                        ? "关闭"
+                        : "同步"}{" "}
+                    · {new Date(store.last_action_at).toLocaleString()}
                   </p>
                 )}
+                {store.schedule_status &&
+                  !["active", "disabled"].includes(store.schedule_status) && (
+                    <div className="error">
+                      计划状态：{store.schedule_status}
+                      {store.schedule_error && ` · ${store.schedule_error}`}
+                      <button
+                        className="quiet"
+                        disabled={busy}
+                        onClick={() => void retrySync(store)}
+                      >
+                        重试同步
+                      </button>
+                    </div>
+                  )}
                 {store.last_error && (
                   <p className="error">最近执行失败：{store.last_error}</p>
                 )}
