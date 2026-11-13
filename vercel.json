@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "crons": [{ "path": "/api/cron", "schedule": "* * * * *" }]
+  "functions": {
+    "src/app/api/queue/edges/route.ts": {
+      "experimentalTriggers": [
+        { "type": "queue/v2beta", "topic": "ozon-promo-edge" }
+      ]
+    }
+  }
 }

@@ -21,6 +21,9 @@ type Store = {
   enabled: boolean;
   last_action_at: string | null;
   last_error: string | null;
+  last_action_key?: string | null;
+  schedule_status?: string;
+  schedule_error?: string | null;
   runs?: {
     action_key: string;
     action: string;
@@ -281,6 +284,10 @@ export default function Home() {
       const result = await response.json();
       if (!response.ok) {
         E(result.error || "添加失败");
+        if (result.store) {
+          F({ ...form, clientId: "", clientSecret: "" });
+          await load();
+        }
         return;
       }
       F({ ...form, name: "", clientId: "", clientSecret: "", windows: [] });
@@ -349,6 +356,25 @@ export default function Home() {
       });
       if (!response.ok) {
         E("删除失败");
+        return;
+      }
+      await load();
+    } catch {
+      E("无法连接服务，请稍后重试");
+    } finally {
+      B(false);
+    }
+  }
+  async function retrySync(store: Store) {
+    B(true);
+    E("");
+    try {
+      const response = await fetch(`/api/stores/${store.id}/sync`, {
+        method: "POST",
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        E(result.error || "计划同步失败");
         return;
       }
       await load();
@@ -511,9 +537,37 @@ export default function Home() {
                 </div>
                 {store.last_action_at && (
                   <p className="muted">
-                    最近执行：{new Date(store.last_action_at).toLocaleString()}
+                    最近执行：
+                    {store.last_action_key?.startsWith("on:")
+                      ? "开启"
+                      : store.last_action_key?.startsWith("off:")
+                        ? "关闭"
+                        : "同步"}{" "}
+                    · {new Date(store.last_action_at).toLocaleString()}
                   </p>
                 )}
+                {store.schedule_status &&
+                  !["active", "disabled"].includes(store.schedule_status) && (
+                    <div className="error">
+                      计划状态：{store.schedule_status}
+                      {store.schedule_error && ` · ${store.schedule_error}`}
+                      <button
+                        className="quiet"
+                        disabled={busy}
+                        onClick={() =>
+                          void (store.schedule_status === "delete_pending" ||
+                          store.schedule_status === "deleting"
+                            ? removeStore(store)
+                            : retrySync(store))
+                        }
+                      >
+                        {store.schedule_status === "delete_pending" ||
+                        store.schedule_status === "deleting"
+                          ? "重试删除"
+                          : "重试同步"}
+                      </button>
+                    </div>
+                  )}
                 {store.last_error && (
                   <p className="error">最近执行失败：{store.last_error}</p>
                 )}
@@ -607,8 +661,7 @@ export default function Home() {
         )}
       </section>
       <footer>
-        Vercel Pro Cron 每分钟检查计划；时区计算基于店铺选择，不受服务器 UTC
-        时区影响。
+        按店铺时区在开关时间执行计划；时区计算不受服务器 UTC 时区影响。
       </footer>
     </main>
   );

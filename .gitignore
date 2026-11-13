@@ -1,5 +1,6 @@
 node_modules
 .next
+*.tsbuildinfo
 .vercel
 .env*
 !.env.example
@@ -7,3 +8,4 @@ node_modules
 .deploy-secrets.local
 
 .admin-password.local
+.schedule-probe.local

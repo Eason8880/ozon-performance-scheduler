@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { authorized } from "@/lib/security";
-import { initDb, pool } from "@/lib/db";
+import { pool } from "@/lib/db";
+import {
+  cleanupScheduleSet,
+  deleteSchedules,
+  syncStoreSchedules,
+  type StoreScheduleConfig,
+} from "@/lib/store-schedules";
 import {
   normalizeWindows,
   validTimezone,
@@ -32,22 +38,21 @@ export async function PATCH(
       { status: 400 },
     );
   try {
-    await initDb();
     const windows = normalizeWindows(windowsInput);
-    const r = await pool.query(
-      "update stores set start_time=$1,stop_time=$2,windows=$3::jsonb,timezone=$4,enabled=$5,last_action_key=null,last_error=null,updated_at=now() where id=$6 returning id,name,timezone,start_time,stop_time,windows,enabled,last_action_at,last_error,created_at",
-      [
-        windows[0].start,
-        windows[0].stop,
-        JSON.stringify(windows),
-        b.timezone,
-        b.enabled,
-        id,
-      ],
-    );
-    if (!r.rowCount)
+    const exists = await pool.query("select id from stores where id=$1", [id]);
+    if (!exists.rowCount)
       return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
-    return NextResponse.json({ store: r.rows[0] });
+    const config: StoreScheduleConfig = {
+      timezone: b.timezone,
+      windows: normalizeWindows(windows),
+      enabled: b.enabled,
+    };
+    await syncStoreSchedules(id, config);
+    const ready = await pool.query(
+      "select id,name,timezone,start_time,stop_time,windows,enabled,last_action_at,last_error,created_at,schedule_status,schedule_error from stores where id=$1",
+      [id],
+    );
+    return NextResponse.json({ store: ready.rows[0] });
   } catch {
     return NextResponse.json(
       { error: "保存失败，请检查数据库设置" },
@@ -62,12 +67,73 @@ export async function DELETE(
   if (!(await authorized()))
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   try {
-    await initDb();
     const { id } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id))
       return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
-    await pool.query("delete from stores where id=$1", [id]);
-    return NextResponse.json({ ok: true });
+    const lockClient = await pool.connect();
+    const lockKey = id;
+    let acquired = false;
+    try {
+      const lock = await lockClient.query(
+        "select pg_try_advisory_lock(hashtext($1)) as acquired",
+        [lockKey],
+      );
+      acquired = Boolean(lock.rows[0].acquired);
+      if (!acquired)
+        return NextResponse.json(
+          { error: "店铺计划正在同步，请稍后重试。" },
+          { status: 409 },
+        );
+      const found = await lockClient.query(
+        "select schedule_names,retired_schedule_names,pending_schedule_names from stores where id=$1",
+        [id],
+      );
+      if (!found.rowCount)
+        return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
+      await lockClient.query(
+        "update stores set enabled=false,schedule_status='deleting' where id=$1",
+        [id],
+      );
+      const names = [
+        ...(found.rows[0].schedule_names ?? []),
+        ...(found.rows[0].retired_schedule_names ?? []),
+        ...(found.rows[0].pending_schedule_names ?? []),
+      ];
+      const cleaned = await cleanupScheduleSet(
+        names,
+        deleteSchedules,
+        async () => {
+          await lockClient.query(
+            `update stores set schedule_status='delete_pending',
+           schedule_error='Schedules could not be removed' where id=$1`,
+            [id],
+          );
+        },
+      );
+      if (!cleaned) {
+        return NextResponse.json(
+          { error: "店铺已停用，但定时任务删除失败；请再次删除以重试清理。" },
+          { status: 503 },
+        );
+      }
+      await lockClient.query("delete from stores where id=$1", [id]);
+      return NextResponse.json({ ok: true });
+    } finally {
+      if (acquired) {
+        try {
+          await lockClient.query("select pg_advisory_unlock(hashtext($1))", [
+            lockKey,
+          ]);
+          lockClient.release();
+        } catch (error) {
+          lockClient.release(
+            error instanceof Error ? error : new Error("unlock failed"),
+          );
+        }
+      } else {
+        lockClient.release();
+      }
+    }
   } catch {
     return NextResponse.json({ error: "删除失败" }, { status: 503 });
   }
