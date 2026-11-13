@@ -199,3 +199,131 @@ footer {
     flex-wrap: wrap;
   }
 }
+
+.full-width {
+  grid-column: 1/-1;
+}
+.window-editor {
+  display: grid;
+  gap: 13px;
+}
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.preset {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #e3e9f2;
+  border-radius: 9px;
+  padding: 12px;
+  cursor: pointer;
+}
+.preset.selected {
+  border-color: #79a8f5;
+  background: #f3f7ff;
+}
+.preset input {
+  margin: 3px 0 0;
+  accent-color: #246fe5;
+}
+.preset span {
+  display: grid;
+  gap: 4px;
+}
+.preset strong {
+  font-size: 13px;
+}
+.preset small {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.window-list {
+  display: grid;
+  gap: 8px;
+}
+.window-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f7f9fc;
+}
+.window-row label {
+  min-width: 145px;
+}
+.window-label {
+  font-size: 12px;
+  color: #64728a;
+  padding-bottom: 12px;
+  min-width: 52px;
+}
+.window-row button {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.add-window {
+  justify-self: start;
+}
+.editbox {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #e1e8f1;
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+}
+.timezone-label {
+  max-width: 320px;
+}
+.store-windows {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+.store-windows span {
+  background: #edf3ff;
+  color: #28599e;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.store-windows small {
+  margin-left: 4px;
+}
+.logs {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.logs summary {
+  cursor: pointer;
+  color: #335e9e;
+}
+.logs p {
+  margin: 5px 0;
+}
+@media (max-width: 700px) {
+  .preset-grid {
+    grid-template-columns: 1fr;
+  }
+  .window-row {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .window-row label {
+    min-width: 120px;
+    flex: 1;
+  }
+  .window-label {
+    padding: 0;
+  }
+  .window-row input {
+    width: 100%;
+  }
+}
