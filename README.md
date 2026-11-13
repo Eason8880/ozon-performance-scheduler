@@ -41,7 +41,7 @@ npm run dev
 
 1. 创建公开 GitHub 仓库并将 `main` 导入 Vercel；在 Vercel 项目中选择 Node 24 或 20。连接 GitHub 后，合并 PR 到 `main` 会触发生产部署。
 2. Vercel Marketplace 已连接 Neon PostgreSQL，仅绑定 Production。数据库服务商的免费额度和条款以创建时页面为准。Preview 不绑定生产数据库或生产密钥；如果要让 Preview 可登录/执行，应另建独立免费数据库并设置 Preview 专用密钥。
-3. 在 Vercel 项目设置中为 Production 和 Preview 分别设置随机且独立的 `APP_SECRET`、`SESSION_SECRET`、`ADMIN_PASSWORD`、`CRON_SECRET`。不要把 `.env.local` 提交到仓库。可用 `openssl rand -base64 32` 生成 AES key、`openssl rand -hex 32` 生成其余随机值。
+3. 在 Vercel Production 环境设置独立随机的 `APP_SECRET`、`SESSION_SECRET`、`ADMIN_PASSWORD`、`CRON_SECRET`。Preview 不配置生产密钥或生产数据库。不要把 `.env.local` 提交到仓库。可用 `openssl rand -base64 32` 生成 AES key、`openssl rand -hex 32` 生成其余随机值。
 4. Vercel Production 已配置 `CRON_SECRET`，Cron 自动调用 `/api/cron`。Preview 不连接生产数据库，也不自动执行店铺计划。
 5. 部署完成后登录并用真实 Performance Client ID/Client Secret 添加店铺。添加动作会先向 Ozon 申请 token 以验证凭据。
 
