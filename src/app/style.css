@@ -28,6 +28,26 @@ header {
   align-items: flex-start;
   margin-bottom: 26px;
 }
+.timezone-clocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin-top: 14px;
+}
+.timezone-clocks > div {
+  display: grid;
+  gap: 3px;
+}
+.timezone-clocks span {
+  color: #8591a4;
+  font-size: 12px;
+}
+.timezone-clocks time {
+  color: #17233a;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
 h1 {
   font-size: 30px;
   letter-spacing: -0.6px;

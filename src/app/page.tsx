@@ -92,6 +92,41 @@ function matches(a: TimeWindow, b: TimeWindow) {
   return a.start === b.start && a.stop === b.stop;
 }
 
+function formatClockTime(value: Date, timezone: string) {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(value);
+}
+
+function TimezoneClocks() {
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="timezone-clocks" aria-label="当前时间">
+      <div>
+        <span>北京时间</span>
+        <time>{now ? formatClockTime(now, "Asia/Shanghai") : "载入中…"}</time>
+      </div>
+      <div>
+        <span>莫斯科时间</span>
+        <time>{now ? formatClockTime(now, "Europe/Moscow") : "载入中…"}</time>
+      </div>
+    </div>
+  );
+}
+
 function WindowEditor({
   windows,
   timezone,
@@ -557,6 +592,7 @@ export default function Home() {
           <h1>按订单付款推广计划</h1>
           <p>组合多个每日时段，在选定时区为店铺开启或关闭全部商品推广。</p>
           <p className="muted">当前身份：{group}</p>
+          <TimezoneClocks />
         </div>
         <button className="quiet" onClick={logout}>
           退出
