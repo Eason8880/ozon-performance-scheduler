@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { desiredState } from "../src/lib/schedule";
+import { desiredState, evaluationTime } from "../src/lib/schedule";
 import {
   convertTimeBetweenTimezones,
   convertWindowsBetweenTimezones,
@@ -13,7 +13,7 @@ import {
   provisionScheduleSet,
   scheduleDefinitions,
 } from "../src/lib/store-schedules";
-import { retryDirective } from "../src/lib/queue-retry";
+import { retryDirective, retryQueueMessage } from "../src/lib/queue-retry";
 
 const oneWindow = (start: string, stop: string) => [{ start, stop }];
 
@@ -330,11 +330,52 @@ test("a late queue event is evaluated against current desired state", () => {
   });
 });
 
-test("queue retries back off and stop after six deliveries", () => {
+test("queue retries back off, then keep retrying every 15 minutes instead of dropping the edge", () => {
   assert.deepEqual(retryDirective(1), { afterSeconds: 60 });
   assert.deepEqual(retryDirective(2), { afterSeconds: 300 });
   assert.deepEqual(retryDirective(3), { afterSeconds: 900 });
-  assert.deepEqual(retryDirective(4), { afterSeconds: 3600 });
-  assert.deepEqual(retryDirective(5), { afterSeconds: 3600 });
-  assert.deepEqual(retryDirective(6), { acknowledge: true });
+  assert.deepEqual(retryDirective(4), { afterSeconds: 900 });
+  assert.deepEqual(retryDirective(6), { afterSeconds: 900 });
+  assert.deepEqual(retryDirective(96), { afterSeconds: 900 });
+});
+
+test("invalid payloads are acknowledged; other failures are retried", () => {
+  const metadata = { messageId: "m", deliveryCount: 7 } as Parameters<
+    typeof retryQueueMessage
+  >[1];
+  const quiet = console.error;
+  console.error = () => undefined;
+  try {
+    assert.deepEqual(
+      retryQueueMessage(new Error("Invalid schedule payload"), metadata),
+      { acknowledge: true },
+    );
+    assert.deepEqual(
+      retryQueueMessage(new Error("Ozon request failed (502)"), metadata),
+      { afterSeconds: 900 },
+    );
+  } finally {
+    console.error = quiet;
+  }
+});
+
+test("an edge delivered before its scheduled minute is judged at that minute", () => {
+  const windows = oneWindow("13:00", "15:00");
+  // 13:00 Moscow is 10:00 UTC; the message arrives one second early.
+  const early = new Date("2026-11-14T09:59:59Z");
+  const at = evaluationTime("2026-11-14T10:00:00Z", early);
+  assert.equal(at.toISOString(), "2026-11-14T10:00:00.000Z");
+  assert.deepEqual(desiredState(at, "Europe/Moscow", windows), {
+    active: true,
+    key: "on:2026-11-14T13:00",
+  });
+  // Judged at arrival time instead, the opening would be missed.
+  assert.equal(desiredState(early, "Europe/Moscow", windows).active, false);
+});
+
+test("late, retried or unscheduled deliveries are judged at the current time", () => {
+  const now = new Date("2026-11-14T10:00:45Z");
+  assert.equal(evaluationTime("2026-11-14T10:00:00Z", now), now);
+  assert.equal(evaluationTime(undefined, now), now);
+  assert.equal(evaluationTime("not a date", now), now);
 });

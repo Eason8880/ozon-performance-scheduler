@@ -20,7 +20,7 @@ export async function POST(
     if (!result.rowCount)
       return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
     const store = result.rows[0];
-    if (store.schedule_status === "delete_pending")
+    if (["delete_pending", "deleting"].includes(store.schedule_status))
       return NextResponse.json(
         { error: "这个店铺正在删除中，请点击「继续删除」。" },
         { status: 409 },

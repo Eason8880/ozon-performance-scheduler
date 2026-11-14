@@ -1,8 +1,8 @@
 import { handleCallback } from "@vercel/queue";
 import type { ScheduleQueueMessage } from "@vercel/schedules";
 import { decrypt } from "@/lib/security";
-import { pool } from "@/lib/db";
-import { desiredState } from "@/lib/schedule";
+import { lockPool, releaseStoreLock } from "@/lib/db";
+import { desiredState, evaluationTime } from "@/lib/schedule";
 import { setPromotion } from "@/lib/ozon";
 import { isCurrentScheduleRevision } from "@/lib/store-schedules";
 import { retryQueueMessage } from "@/lib/queue-retry";
@@ -37,15 +37,15 @@ const queueCallback = handleCallback<
         ? payload.source
         : "state_sync";
 
-    const client = await pool.connect();
-    const lockId = payload.storeId;
+    const client = await lockPool.connect();
+    let acquired = false;
     try {
       const lock = await client.query(
         "select pg_try_advisory_lock(hashtext($1)) as acquired",
-        [lockId],
+        [payload.storeId],
       );
-      if (!lock.rows[0].acquired)
-        throw new Error("Store action is in progress");
+      acquired = Boolean(lock.rows[0].acquired);
+      if (!acquired) throw new Error("Store action is in progress");
 
       const result = await client.query("select * from stores where id=$1", [
         payload.storeId,
@@ -64,7 +64,16 @@ const queueCallback = handleCallback<
       const windows = store.windows?.length
         ? store.windows
         : [{ start: store.start_time, stop: store.stop_time }];
-      const target = desiredState(new Date(), store.timezone, windows);
+      const target = desiredState(
+        evaluationTime(
+          scheduled
+            ? (message as ScheduleQueueMessage<EdgePayload>).scheduledAt
+            : undefined,
+          new Date(),
+        ),
+        store.timezone,
+        windows,
+      );
       if (store.last_action_key === target.key) return;
 
       try {
@@ -88,8 +97,15 @@ const queueCallback = handleCallback<
           detail,
           store.id,
         ]);
+        // Retries continue until the action succeeds; log a repeated identical
+        // failure at most once an hour so the history stays readable.
         await client.query(
-          "insert into job_runs(store_id,action_key,action,status,detail,source) values($1,$2,$3,'failed',$4,$5)",
+          `insert into job_runs(store_id,action_key,action,status,detail,source)
+           select $1,$2,$3,'failed',$4,$5
+           where not exists (
+             select 1 from job_runs where store_id=$1 and action_key=$2
+               and status='failed' and detail=$4
+               and created_at > now() - interval '1 hour')`,
           [
             store.id,
             target.key,
@@ -127,14 +143,8 @@ const queueCallback = handleCallback<
         );
       }
     } finally {
-      try {
-        await client.query("select pg_advisory_unlock(hashtext($1))", [lockId]);
-        client.release();
-      } catch (error) {
-        client.release(
-          error instanceof Error ? error : new Error("unlock failed"),
-        );
-      }
+      if (acquired) await releaseStoreLock(client, payload.storeId);
+      else client.release();
     }
   },
   { retry: retryQueueMessage },
