@@ -973,7 +973,13 @@ export default function Home() {
                           ，{tzName(store.timezone)}时间{" "}
                           {formatLogTime(latest.created_at, store.timezone)}
                         </span>
-                        <span className="logs-toggle">查看执行记录</span>
+                        <span className="logs-toggle">
+                          <span className="logs-toggle-closed">
+                            查看执行记录
+                          </span>
+                          <span className="logs-toggle-open">收起执行记录</span>
+                          <span className="logs-chevron" aria-hidden="true" />
+                        </span>
                       </summary>
                       <ol>
                         {store.runs!.map((run) => (
@@ -1005,24 +1011,45 @@ export default function Home() {
                         时间为{tzName(store.timezone)}
                         时间。鼠标停在某一条上，可以同时看到莫斯科和北京时间。
                       </p>
-                      {runPages[store.id]?.hasMore && (
-                        <button
-                          type="button"
-                          className="btn ghost"
-                          disabled={runPages[store.id]?.loading}
-                          aria-busy={runPages[store.id]?.loading}
-                          onClick={() => void loadMoreRuns(store)}
-                        >
-                          {runPages[store.id]?.loading
-                            ? "正在加载…"
-                            : "加载更早的记录"}
-                        </button>
-                      )}
                       {runPages[store.id]?.error && (
                         <p className="alert" role="alert">
                           {runPages[store.id].error}
                         </p>
                       )}
+                      <div className="logs-foot">
+                        {runPages[store.id]?.hasMore && (
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            disabled={runPages[store.id]?.loading}
+                            aria-busy={runPages[store.id]?.loading}
+                            onClick={() => void loadMoreRuns(store)}
+                          >
+                            {runPages[store.id]?.loading
+                              ? "正在加载…"
+                              : "加载更早的记录"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn text logs-close"
+                          onClick={(event) => {
+                            const details =
+                              event.currentTarget.closest("details");
+                            if (!details) return;
+                            details.open = false;
+                            const summary = details.querySelector("summary");
+                            if (
+                              summary &&
+                              summary.getBoundingClientRect().top < 0
+                            )
+                              summary.scrollIntoView({ block: "nearest" });
+                            summary?.focus();
+                          }}
+                        >
+                          收起执行记录
+                        </button>
+                      </div>
                     </details>
                   )}
 
