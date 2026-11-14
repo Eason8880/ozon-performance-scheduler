@@ -14,7 +14,7 @@ export async function GET() {
     return NextResponse.json(
       {
         code: "DATABASE_PENDING",
-        error: "数据库尚未连接，请完成 PostgreSQL 配置。",
+        error: "还没有连接数据库，请先设置 DATABASE_URL。",
       },
       { status: 503 },
     );
@@ -52,7 +52,7 @@ export async function GET() {
     return NextResponse.json({ stores, group });
   } catch (e) {
     return NextResponse.json(
-      { error: "数据库连接失败，请检查 DATABASE_URL" },
+      { error: "店铺列表没有读取成功，数据库连接失败。请检查 DATABASE_URL 后刷新。" },
       { status: 503 },
     );
   }
@@ -77,12 +77,12 @@ export async function POST(req: Request) {
     !validTimezone(b.timezone)
   )
     return NextResponse.json(
-      { error: "请检查店铺名称、凭据和时区" },
+      { error: "请填写店铺名称、Client ID 和 Client Secret。" },
       { status: 400 },
     );
   if (!validateWindows(windowsInput))
     return NextResponse.json(
-      { error: "时段无效、重叠或为空；请调整后再保存（最多8段）" },
+      { error: "时段设置有问题：至少要有 1 个、最多 8 个时段，开启和关闭时间不能相同，时段之间不能重叠。" },
       { status: 400 },
     );
   try {
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           store: r.rows[0],
-          error: "店铺已保存，但每日开关计划创建失败，请重试同步。",
+          error: "店铺已添加，但定时任务没有创建成功。请在店铺卡片上点击「重试」。",
         },
         { status: 503 },
       );
@@ -132,8 +132,8 @@ export async function POST(req: Request) {
         error:
           e instanceof Error &&
           e.message.startsWith("Ozon authorization failed")
-            ? e.message
-            : "保存失败，请检查数据库连接",
+            ? `Ozon 没有接受这组密钥（错误码 ${e.message.match(/\((\d+)\)/)?.[1] ?? "未知"}）。请确认填的是 Performance API 的 Client ID 和 Client Secret，且没有多余空格。`
+            : "店铺没有添加成功，请稍后重试。",
       },
       { status: 503 },
     );

@@ -29,12 +29,12 @@ export async function PATCH(
       : null);
   if (!b || !validTimezone(b.timezone) || typeof b.enabled !== "boolean")
     return NextResponse.json(
-      { error: "请检查时区和启用状态" },
+      { error: "提交的时区或开关状态不正确，请刷新页面后重试。" },
       { status: 400 },
     );
   if (!validateWindows(windowsInput))
     return NextResponse.json(
-      { error: "时段无效、重叠或为空；请调整后再保存（最多8段）" },
+      { error: "时段设置有问题：至少要有 1 个、最多 8 个时段，开启和关闭时间不能相同，时段之间不能重叠。" },
       { status: 400 },
     );
   try {
@@ -58,7 +58,7 @@ export async function PATCH(
     return NextResponse.json({ store: ready.rows[0] });
   } catch {
     return NextResponse.json(
-      { error: "保存失败，请检查数据库设置" },
+      { error: "没有保存成功，请稍后重试。" },
       { status: 503 },
     );
   }
@@ -84,7 +84,7 @@ export async function DELETE(
       acquired = Boolean(lock.rows[0].acquired);
       if (!acquired)
         return NextResponse.json(
-          { error: "店铺计划正在同步，请稍后重试。" },
+          { error: "这个店铺的定时任务正在更新，请稍后再试。" },
           { status: 409 },
         );
       const found = await lockClient.query(
@@ -115,7 +115,7 @@ export async function DELETE(
       );
       if (!cleaned) {
         return NextResponse.json(
-          { error: "店铺已停用，但定时任务删除失败；请再次删除以重试清理。" },
+          { error: "店铺已停用，但定时任务没有删除干净。请点击「继续删除」。" },
           { status: 503 },
         );
       }
@@ -138,6 +138,6 @@ export async function DELETE(
       }
     }
   } catch {
-    return NextResponse.json({ error: "删除失败" }, { status: 503 });
+    return NextResponse.json({ error: "店铺没有删除成功，请稍后重试。" }, { status: 503 });
   }
 }
