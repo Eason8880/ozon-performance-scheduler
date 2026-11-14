@@ -504,11 +504,43 @@ input[type="time"] {
 }
 .logs-toggle {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--action);
   font-weight: 600;
 }
-.logs[open] .logs-toggle {
-  visibility: hidden;
+.logs summary:hover .logs-toggle {
+  text-decoration: underline;
+}
+.logs-toggle-open,
+.logs[open] .logs-toggle-closed {
+  display: none;
+}
+.logs[open] .logs-toggle-open {
+  display: inline;
+}
+/* Points down when collapsed, up when expanded. */
+.logs-chevron {
+  width: 7px;
+  height: 7px;
+  margin-top: -3px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+.logs[open] .logs-chevron {
+  margin-top: 3px;
+  transform: rotate(-135deg);
+}
+.logs-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.logs-close {
+  margin-left: auto;
 }
 .logs ol {
   margin: 10px 0 8px;
