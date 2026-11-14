@@ -2,7 +2,7 @@ import { Schedules } from "@vercel/schedules";
 import { send } from "@vercel/queue";
 import type { PoolClient } from "pg";
 import { normalizeWindows, type TimeWindow } from "./windows";
-import { pool } from "./db";
+import { lockPool, releaseStoreLock } from "./db";
 import type { ActionSource } from "./action-log";
 
 export const STORE_SCHEDULE_TOPIC = "ozon-promo-edge";
@@ -141,28 +141,21 @@ export async function syncStoreSchedules(
     "initial_sync" | "config_sync" | "state_sync"
   > = "state_sync",
 ) {
-  const lockClient = await pool.connect();
-  // Keep the key compatible with the old polling handler during rollout.
-  const lockKey = storeId;
+  // The lock key is the store ID, shared with the queue consumer and delete.
+  const lockClient = await lockPool.connect();
+  let acquired = false;
   try {
     const locked = await lockClient.query(
       "select pg_try_advisory_lock(hashtext($1)) as acquired",
-      [lockKey],
+      [storeId],
     );
-    if (!locked.rows[0].acquired)
+    acquired = Boolean(locked.rows[0].acquired);
+    if (!acquired)
       throw new Error("A schedule update is already running for this store");
     await syncStoreSchedulesUnlocked(storeId, config, source, lockClient);
   } finally {
-    try {
-      await lockClient.query("select pg_advisory_unlock(hashtext($1))", [
-        lockKey,
-      ]);
-      lockClient.release();
-    } catch (error) {
-      lockClient.release(
-        error instanceof Error ? error : new Error("unlock failed"),
-      );
-    }
+    if (acquired) await releaseStoreLock(lockClient, storeId);
+    else lockClient.release();
   }
 }
 
@@ -173,7 +166,7 @@ async function syncStoreSchedulesUnlocked(
   client: PoolClient,
 ) {
   const current = await client.query(
-    `select schedule_revision,schedule_names,retired_schedule_names,
+    `select schedule_status,schedule_revision,schedule_names,retired_schedule_names,
       pending_revision,pending_config,pending_schedule_names from stores where id=$1`,
     [storeId],
   );

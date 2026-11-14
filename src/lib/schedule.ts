@@ -30,6 +30,22 @@ function minuteOf(time: string) {
   return hour * 60 + minute;
 }
 
+/**
+ * The moment a queue message should be judged at.
+ *
+ * A scheduled edge must never be evaluated before the minute it was scheduled
+ * for: if it were delivered even a second early, the store would still look
+ * "before the edge", match its last applied state and be skipped, losing the
+ * whole window. Late or retried deliveries use the current time so they apply
+ * whatever state is due now.
+ */
+export function evaluationTime(scheduledAt: string | undefined, now: Date) {
+  const scheduled = scheduledAt ? Date.parse(scheduledAt) : Number.NaN;
+  return Number.isFinite(scheduled) && scheduled > now.getTime()
+    ? new Date(scheduled)
+    : now;
+}
+
 export function desiredState(now: Date, tz: string, windows: TimeWindow[]) {
   const local = localParts(now, tz);
   const current = pseudoDay(local.date) * 1440 + local.minute;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sessionGroup } from "@/lib/security";
-import { pool } from "@/lib/db";
+import { lockPool, pool, releaseStoreLock } from "@/lib/db";
 import {
   cleanupScheduleSet,
   deleteSchedules,
@@ -73,13 +73,12 @@ export async function DELETE(
     const { id } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id))
       return NextResponse.json({ error: "店铺不存在" }, { status: 404 });
-    const lockClient = await pool.connect();
-    const lockKey = id;
+    const lockClient = await lockPool.connect();
     let acquired = false;
     try {
       const lock = await lockClient.query(
         "select pg_try_advisory_lock(hashtext($1)) as acquired",
-        [lockKey],
+        [id],
       );
       acquired = Boolean(lock.rows[0].acquired);
       if (!acquired)
@@ -122,20 +121,8 @@ export async function DELETE(
       await lockClient.query("delete from stores where id=$1", [id]);
       return NextResponse.json({ ok: true });
     } finally {
-      if (acquired) {
-        try {
-          await lockClient.query("select pg_advisory_unlock(hashtext($1))", [
-            lockKey,
-          ]);
-          lockClient.release();
-        } catch (error) {
-          lockClient.release(
-            error instanceof Error ? error : new Error("unlock failed"),
-          );
-        }
-      } else {
-        lockClient.release();
-      }
+      if (acquired) await releaseStoreLock(lockClient, id);
+      else lockClient.release();
     }
   } catch {
     return NextResponse.json({ error: "店铺没有删除成功，请稍后重试。" }, { status: 503 });
