@@ -7,9 +7,9 @@ const sourceLabels: Record<
   Exclude<ActionSource, "scheduled" | "unknown">,
   string
 > = {
-  initial_sync: "初始同步",
-  config_sync: "配置同步",
-  state_sync: "状态同步",
+  initial_sync: "添加店铺后校准",
+  config_sync: "修改设置后校准",
+  state_sync: "状态校准",
 };
 
 export function describeAction(
@@ -20,14 +20,14 @@ export function describeAction(
   const target = action === "activate" ? "开启" : "关闭";
   const succeeded = status === "success";
   if (source === "scheduled")
-    return `定时${target} · ${succeeded ? "成功" : "失败"}`;
+    return succeeded ? `按时${target}推广` : `按时${target}推广失败`;
   if (source && source in sourceLabels) {
     const label = sourceLabels[source as keyof typeof sourceLabels];
     return succeeded
-      ? `${label}完成 · 状态${target}`
-      : `${label}失败 · 目标状态${target}`;
+      ? `${label}，推广已${target}`
+      : `${label}失败，推广应为${target}`;
   }
-  return `执行${target} · ${succeeded ? "成功" : "失败"}`;
+  return succeeded ? `${target}推广` : `${target}推广失败`;
 }
 
 export function formatActionTime(value: string | Date, storeTimezone: string) {

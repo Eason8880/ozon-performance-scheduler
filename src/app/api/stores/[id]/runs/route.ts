@@ -47,6 +47,6 @@ export async function GET(
     );
     return NextResponse.json(pageActionRuns(runs.rows));
   } catch {
-    return NextResponse.json({ error: "读取执行记录失败" }, { status: 503 });
+    return NextResponse.json({ error: "执行记录没有读取成功，请重试。" }, { status: 503 });
   }
 }

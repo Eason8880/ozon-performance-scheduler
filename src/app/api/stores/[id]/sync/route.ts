@@ -22,7 +22,7 @@ export async function POST(
     const store = result.rows[0];
     if (store.schedule_status === "delete_pending")
       return NextResponse.json(
-        { error: "请使用删除操作重试清理" },
+        { error: "这个店铺正在删除中，请点击「继续删除」。" },
         { status: 409 },
       );
     const pending = store.pending_config;
@@ -37,7 +37,7 @@ export async function POST(
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(
-      { error: "计划同步失败，请检查Vercel Schedules状态后重试。" },
+      { error: "定时任务更新失败，请稍后重试。如果一直失败，请检查 Vercel Schedules 是否正常。" },
       { status: 503 },
     );
   }
