@@ -22,7 +22,7 @@ export async function GET() {
   if (!group) return NextResponse.json({ error: "未登录" }, { status: 401 });
   try {
     const r = await pool.query(
-      `select s.id,s.name,s.timezone,s.start_time,s.stop_time,
+      `select s.id,s.name,s.owner_group,s.timezone,s.start_time,s.stop_time,
        case when jsonb_array_length(s.windows)>0 then s.windows
          else jsonb_build_array(jsonb_build_object('start',s.start_time,'stop',s.stop_time)) end as windows,
        s.enabled,s.last_action_key,s.last_action_at,s.last_error,s.created_at,
