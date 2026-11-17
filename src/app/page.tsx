@@ -489,11 +489,7 @@ export default function Home() {
             ]),
           ),
         );
-        G(
-          result.group === "admin"
-            ? "管理员，可管理全部店铺"
-            : `${result.group} 组，只能看到本组添加的店铺`,
-        );
+        G(result.group);
       }
     } catch (err) {
       if (generation !== pagingGeneration.current) return;
@@ -810,7 +806,10 @@ export default function Home() {
             给每个店铺设置每天的投放时段：到开启时间自动打开「按订单付款」推广，到关闭时间自动关掉。开关对店铺内的全部商品生效。
           </p>
           <p className="identity">
-            当前登录：{group}
+            当前登录：
+            {group === "admin"
+              ? "管理员，可管理全部店铺"
+              : `${group} 组，只能看到本组添加的店铺`}
             <button className="btn text" onClick={logout}>
               退出登录
             </button>
