@@ -18,6 +18,7 @@ type Preset = { id: string; title: string; moscow: TimeWindow };
 type Store = {
   id: string;
   name: string;
+  owner_group: string | null;
   timezone: string;
   windows: TimeWindow[];
   enabled: boolean;
@@ -876,7 +877,14 @@ export default function Home() {
                   key={store.id}
                 >
                   <div className="store-head">
-                    <h3>{store.name}</h3>
+                    <div className="store-title">
+                      <h3>{store.name}</h3>
+                      {group === "admin" && (
+                        <span className="store-group" title="所属分组">
+                          {store.owner_group ?? "管理员"}
+                        </span>
+                      )}
+                    </div>
                     <span
                       className={`pill ${
                         !store.enabled ? "off" : state?.on ? "on" : "idle"

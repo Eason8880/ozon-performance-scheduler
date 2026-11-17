@@ -348,6 +348,24 @@ input[type="time"] {
   justify-content: space-between;
   gap: 12px;
 }
+.store-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.store-group {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--unlit);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
 .store-head h3 {
   font-size: 19px;
   line-height: 1.3;
