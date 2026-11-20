@@ -11,6 +11,7 @@ for (const key of [
   "OZ4_ADMIN_PASSWORD",
   "OZ5_ADMIN_PASSWORD",
   "CT_ADMIN_PASSWORD",
+  "VP_ADMIN_PASSWORD",
 ])
   delete process.env[key];
 
@@ -51,9 +52,37 @@ test("ct group requires a configured non-empty unique password", () => {
   delete process.env.CT_ADMIN_PASSWORD;
 });
 
+test("vp group requires a configured non-empty unique password", (t) => {
+  t.after(() => {
+    delete process.env.VP_ADMIN_PASSWORD;
+    delete process.env.CT_ADMIN_PASSWORD;
+  });
+  assert.equal(checkPassword("vp"), null);
+  assert.equal(checkPassword(""), null);
+  process.env.VP_ADMIN_PASSWORD = "";
+  assert.equal(checkPassword("vp"), null);
+  assert.equal(checkPassword(""), null);
+
+  process.env.VP_ADMIN_PASSWORD = "vp-test-password";
+  process.env.CT_ADMIN_PASSWORD = "ct-test-password";
+  assert.equal(checkPassword("vp-test-password"), "vp");
+  assert.equal(checkPassword("ct-test-password"), "ct");
+  assert.equal(checkPassword("oz1"), "oz1");
+  assert.equal(checkPassword("global-admin-test-password"), "admin");
+
+  for (const password of [
+    "oz1",
+    "ct-test-password",
+    "global-admin-test-password",
+  ]) {
+    process.env.VP_ADMIN_PASSWORD = password;
+    assert.equal(checkPassword(password), null);
+  }
+});
+
 test("accepts signed group sessions and rejects tampering or expiry", () => {
   const expiry = Date.now() + 60_000;
-  for (const group of ["admin", "oz1", "oz2", "oz3", "oz4", "oz5", "ct"])
+  for (const group of ["admin", "oz1", "oz2", "oz3", "oz4", "oz5", "ct", "vp"])
     assert.equal(sessionGroupFromCookie(cookie(`${expiry}.${group}`)), group);
 
   const valid = cookie(`${expiry}.oz1`);
@@ -67,6 +96,17 @@ test("group ownership isolates ct while admin remains global", () => {
   assert.equal(canReadStoreLogs("ct", "oz1"), false);
   assert.equal(canReadStoreLogs("oz1", "ct"), false);
   assert.equal(canReadStoreLogs("admin", "ct"), true);
+});
+
+test("group ownership isolates vp while admin remains global", () => {
+  const { canReadStoreLogs } = require("../src/lib/action-runs");
+  assert.equal(canReadStoreLogs("vp", "vp"), true);
+  assert.equal(canReadStoreLogs("vp", null), false);
+  for (const group of ["ct", "oz1"]) {
+    assert.equal(canReadStoreLogs("vp", group), false);
+    assert.equal(canReadStoreLogs(group, "vp"), false);
+  }
+  assert.equal(canReadStoreLogs("admin", "vp"), true);
 });
 
 test("keeps valid legacy expiry-only session as global admin", () => {

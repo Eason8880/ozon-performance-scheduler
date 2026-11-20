@@ -17,6 +17,7 @@ async function main() {
       "003_job_run_source",
       "004_store_groups",
       "005_ct_store_group",
+      "006_vp_store_group",
     ]) {
       const already = await client.query(
         "select 1 from schema_migrations where version=$1",
